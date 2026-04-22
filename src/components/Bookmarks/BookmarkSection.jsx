@@ -52,7 +52,7 @@ export default function BookmarkSection({
   const visibleBookmarks = expanded ? bookmarks : bookmarks.slice(0, MAX_VISIBLE);
   const hasMore = bookmarks.length > MAX_VISIBLE;
 
-  const bookmarkIds = visibleBookmarks.map((b) => b.id);
+  const bookmarkIds = bookmarks.map((b) => b.id);
 
   return (
     <div ref={setSortableRef} style={style} className="h-full">

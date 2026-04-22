@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import {
   DndContext,
-  closestCorners,
+  rectIntersection,
   KeyboardSensor,
   PointerSensor,
   useSensor,
@@ -124,25 +124,37 @@ export default function BookmarkGrid({ searchQuery }) {
     const activeBookmark = state.bookmarks.find((b) => b.id === activeId);
     if (!activeBookmark) return;
 
-    // Check if dragging over a section droppable
-    const overSection = state.sections.find((s) => s.id === overId);
     const overBookmark = state.bookmarks.find((b) => b.id === overId);
+    const overSection = state.sections.find((s) => s.id === overId);
 
-    if (overSection && activeBookmark.sectionId !== overSection.id) {
-      // Move to a different section (empty or header)
-      const updated = state.bookmarks.map((b) =>
-        b.id === activeId ? { ...b, sectionId: overSection.id } : b
-      );
-      reorderBookmarks(updated);
+    // Case 1: Over another bookmark
+    if (overBookmark) {
+      if (activeBookmark.sectionId !== overBookmark.sectionId) {
+        // Cross-section move
+        const oldIndex = state.bookmarks.findIndex((b) => b.id === activeId);
+        const newIndex = state.bookmarks.findIndex((b) => b.id === overId);
+        
+        let updatedBookmarks = [...state.bookmarks];
+        updatedBookmarks[oldIndex] = { ...activeBookmark, sectionId: overBookmark.sectionId };
+        
+        reorderBookmarks(arrayMove(updatedBookmarks, oldIndex, newIndex));
+      } else {
+        // Same section reorder
+        const oldIndex = state.bookmarks.findIndex((b) => b.id === activeId);
+        const newIndex = state.bookmarks.findIndex((b) => b.id === overId);
+        reorderBookmarks(arrayMove(state.bookmarks, oldIndex, newIndex));
+      }
       return;
     }
 
-    if (overBookmark && activeBookmark.sectionId !== overBookmark.sectionId) {
-      // Move to a different section (over another bookmark)
-      const updated = state.bookmarks.map((b) =>
-        b.id === activeId ? { ...b, sectionId: overBookmark.sectionId } : b
-      );
-      reorderBookmarks(updated);
+    // Case 2: Over a section droppable (empty area or header)
+    if (overSection && activeBookmark.sectionId !== overSection.id) {
+      const oldIndex = state.bookmarks.findIndex((b) => b.id === activeId);
+      let updatedBookmarks = [...state.bookmarks];
+      updatedBookmarks[oldIndex] = { ...activeBookmark, sectionId: overSection.id };
+      
+      // Move to the end of the global list for this section
+      reorderBookmarks(updatedBookmarks);
     }
   };
 
@@ -150,55 +162,18 @@ export default function BookmarkGrid({ searchQuery }) {
     const { active, over } = event;
     setActiveId(null);
 
-    if (!over || active.id === over.id) return;
+    if (!over) return;
 
     const activeType = active.data.current?.type;
     
-    // Sort sections by order
-    const sortedSections = [...state.sections].sort((a, b) => a.order - b.order);
-
     if (activeType === 'Section') {
+      const sortedSections = [...state.sections].sort((a, b) => a.order - b.order);
       const oldIndex = sortedSections.findIndex((s) => s.id === active.id);
       const newIndex = sortedSections.findIndex((s) => s.id === over.id);
-      if (oldIndex !== -1 && newIndex !== -1) {
-        const reordered = arrayMove(sortedSections, oldIndex, newIndex);
-        reorderSections(reordered);
-      }
-      return;
-    }
-
-    // Bookmark dragging logic
-    const activeBookmark = state.bookmarks.find((b) => b.id === active.id);
-    if (!activeBookmark) return;
-
-    // Check if dropping onto a section header/empty space (droppable)
-    const overSection = state.sections.find((s) => s.id === over.id);
-    
-    if (overSection) {
-      // Move to the end of the new section
-      const otherBookmarks = state.bookmarks.filter((b) => b.id !== active.id);
-      const updatedBookmark = { ...activeBookmark, sectionId: overSection.id };
-      reorderBookmarks([...otherBookmarks, updatedBookmark]);
-      return;
-    }
-
-    const overBookmark = state.bookmarks.find((b) => b.id === over.id);
-    if (!overBookmark) return;
-
-    // Move within same section or to a specific position in a different section
-    const oldIndex = state.bookmarks.findIndex((b) => b.id === active.id);
-    const newIndex = state.bookmarks.findIndex((b) => b.id === over.id);
-    
-    if (oldIndex !== -1 && newIndex !== -1) {
-      let updatedBookmarks = [...state.bookmarks];
       
-      // If moving cross-section, update the sectionId first
-      if (activeBookmark.sectionId !== overBookmark.sectionId) {
-        updatedBookmarks[oldIndex] = { ...activeBookmark, sectionId: overBookmark.sectionId };
+      if (oldIndex !== -1 && newIndex !== -1 && oldIndex !== newIndex) {
+        reorderSections(arrayMove(sortedSections, oldIndex, newIndex));
       }
-      
-      const reordered = arrayMove(updatedBookmarks, oldIndex, newIndex);
-      reorderBookmarks(reordered);
     }
   };
 
@@ -206,7 +181,7 @@ export default function BookmarkGrid({ searchQuery }) {
   const activeSection = state.sections.find(s => s.id === activeId);
   const activeBookmark = state.bookmarks.find(b => b.id === activeId);
 
-  // Sort sections by order (already defined above but needed here too)
+  // Sort sections by order
   const sortedSectionsList = [...state.sections].sort((a, b) => a.order - b.order);
 
   // If searching, only show sections with results
@@ -219,7 +194,7 @@ export default function BookmarkGrid({ searchQuery }) {
       <div className="w-full">
         <DndContext
           sensors={sensors}
-          collisionDetection={closestCorners}
+          collisionDetection={rectIntersection}
           onDragStart={handleDragStart}
           onDragOver={handleDragOver}
           onDragEnd={handleDragEnd}
