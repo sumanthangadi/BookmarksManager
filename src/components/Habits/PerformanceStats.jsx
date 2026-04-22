@@ -51,6 +51,7 @@ export default function PerformanceStats({ habits }) {
 
   const todayStats = dailyData.find(d => d.isToday) || { percentage: 0, dayCompleted: 0, dayScheduled: 0 };
   const displayPercentage = todayStats.percentage;
+  const weekPercentage = totalScheduledForWeek === 0 ? 0 : Math.round((totalCompletedThisWeek / totalScheduledForWeek) * 100);
 
   return (
     <div className="flex flex-col h-full bg-white/[0.02] rounded-xl border border-white/5 p-5 relative overflow-hidden">
@@ -59,42 +60,68 @@ export default function PerformanceStats({ habits }) {
         <div className="w-32 h-32 rounded-full border-[10px] border-brand-500 blur-[4px]" />
       </div>
 
-      <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-6 z-10">
-        Daily Performance
-      </h4>
+      <div className="flex items-center justify-between mb-4 z-10">
+        <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+          Performance Overview
+        </h4>
+      </div>
 
-      <div className="flex-1 flex flex-col items-center justify-center mb-6 z-10 mt-2">
-        <div className="relative flex items-center justify-center">
-          <svg className="w-32 h-32 transform -rotate-90">
-            <circle
-              className="text-white/5"
-              strokeWidth="8"
-              stroke="currentColor"
-              fill="transparent"
-              r="56"
-              cx="64"
-              cy="64"
-            />
-            <circle
-              className="text-brand-500 transition-all duration-1000 ease-out"
-              strokeWidth="8"
-              strokeDasharray={56 * 2 * Math.PI}
-              strokeDashoffset={56 * 2 * Math.PI - (displayPercentage / 100) * 56 * 2 * Math.PI}
-              strokeLinecap="round"
-              stroke="currentColor"
-              fill="transparent"
-              r="56"
-              cx="64"
-              cy="64"
-            />
-          </svg>
-          <div className="absolute flex flex-col items-center">
-            <span className="text-3xl font-bold text-gray-100">{displayPercentage}%</span>
+      <div className="flex-1 grid grid-cols-2 gap-4 items-center justify-center mb-6 z-10 mt-2">
+        {/* Daily Stats */}
+        <div className="flex flex-col items-center">
+          <div className="relative flex items-center justify-center">
+            <svg className="w-24 h-24 transform -rotate-90">
+              <circle className="text-white/5" strokeWidth="6" stroke="currentColor" fill="transparent" r="42" cx="48" cy="48" />
+              <circle
+                className="text-brand-500 transition-all duration-1000 ease-out"
+                strokeWidth="6"
+                strokeDasharray={42 * 2 * Math.PI}
+                strokeDashoffset={42 * 2 * Math.PI - (displayPercentage / 100) * 42 * 2 * Math.PI}
+                strokeLinecap="round"
+                stroke="currentColor"
+                fill="transparent"
+                r="42"
+                cx="48"
+                cy="48"
+              />
+            </svg>
+            <div className="absolute flex flex-col items-center">
+              <span className="text-xl font-bold text-gray-100">{displayPercentage}%</span>
+            </div>
           </div>
+          <span className="text-[10px] text-gray-500 mt-2 uppercase font-bold tracking-tighter">Daily</span>
+          <p className="text-[10px] text-gray-400 mt-1">
+            <span className="text-brand-300 font-bold">{todayStats.dayCompleted}</span>/{todayStats.dayScheduled} done
+          </p>
         </div>
-        <p className="text-xs text-gray-400 mt-4">
-          <span className="text-brand-300 font-medium text-sm">{todayStats.dayCompleted}</span> / {todayStats.dayScheduled} habits completed
-        </p>
+
+        {/* Weekly Stats */}
+        <div className="flex flex-col items-center">
+          <div className="relative flex items-center justify-center">
+            <svg className="w-24 h-24 transform -rotate-90">
+              <circle className="text-white/5" strokeWidth="6" stroke="currentColor" fill="transparent" r="42" cx="48" cy="48" />
+              <circle
+                className="text-brand-400 transition-all duration-1000 ease-out opacity-80"
+                strokeWidth="6"
+                strokeDasharray={42 * 2 * Math.PI}
+                strokeDashoffset={42 * 2 * Math.PI - (weekPercentage / 100) * 42 * 2 * Math.PI}
+                strokeLinecap="round"
+                stroke="currentColor"
+                fill="transparent"
+                r="42"
+                cx="48"
+                cy="48"
+              />
+            </svg>
+            <div className="absolute flex flex-col items-center">
+              <span className="text-xl font-bold text-gray-100">{weekPercentage}%</span>
+            </div>
+          </div>
+          <span className="text-[10px] text-gray-500 mt-2 uppercase font-bold tracking-tighter">Weekly</span>
+          <p className="text-[10px] text-gray-400 mt-1">
+            <span className="text-brand-300 font-bold">{totalCompletedThisWeek}</span>/{totalScheduledForWeek} done
+          </p>
+        </div>
       </div>
 
       {/* Mini Bar Chart */}

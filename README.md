@@ -1,135 +1,62 @@
-# 📚 BookMarks Manager — Chrome New Tab Dashboard
+# BookMarks Manager & Habit Tracker Dashboard
 
-A premium Chrome/Brave extension that replaces your new tab page with a beautiful, customizable bookmark dashboard featuring glassmorphism UI, drag-and-drop organization, quick notes, and wallpaper customization.
+A premium Chrome Extension "New Tab" override that combines a powerful bookmark manager with a real-time synchronized Habit Tracker.
 
-![Dashboard Preview](./public/icons/icon128.png)
+## Features
+- **Dark Red Glassmorphism UI**: High-end aesthetic with smooth animations.
+- **Advanced Bookmarks**: Reorderable sections, drag-and-drop support, and compact grid layout.
+- **Habit Tracker**: Real-time sync with Firebase, weekly schedule table, and daily performance stats.
+- **Customizable**: Change wallpapers and manage layouts easily.
 
----
+## Installation & Setup
 
-## ✨ Features
+### 1. Prerequisites
+- **Node.js**: Ensure you have Node.js installed (v18+ recommended).
+- **Chrome Browser**: To run the extension.
 
-- 🎨 **Premium Glassmorphism UI** — Dark red/black theme with frosted glass effects
-- 📑 **Organized Bookmark Sections** — Work, Study, AI Tools, Social, Entertainment, News (customizable)
-- ➕ **Add / Edit / Delete Bookmarks** — Full CRUD with URL validation and favicon auto-fetch
-- 🔀 **Drag & Drop Reorder** — Reorder bookmarks within and across sections
-- 🔍 **Smart Search** — Filter bookmarks in real-time or search the web (Ctrl+K shortcut)
-- 🕐 **Live Clock & Date** — 12h/24h format with personalized greeting
-- 📝 **Quick Notes Widget** — Collapsible note-taking panel with auto-save
-- 🖼️ **Wallpaper Changer** — 8 preset gradient wallpapers + custom image upload
-- ⬇️ **Import Browser Bookmarks** — Import your existing Chrome/Brave bookmarks
-- ⚙️ **Settings Panel** — Clock format, search engine, display toggles, and more
-- 💾 **Persistent Storage** — All data saved via `chrome.storage.local`
-- 📱 **Responsive Layout** — Works on all screen sizes
-- ✨ **Smooth Animations** — Staggered fade-in, hover effects, micro-interactions
-
----
-
-## 🛠️ Tech Stack
-
-| Technology | Purpose |
-|---|---|
-| React 19 | UI Framework |
-| Tailwind CSS 3 | Styling |
-| Vite 6 | Build Tool |
-| @dnd-kit | Drag & Drop |
-| Lucide React | Icons |
-| Chrome Manifest V3 | Extension API |
-
----
-
-## 📁 Project Structure
-
-```
-src/
-├── components/
-│   ├── Bookmarks/     # BookmarkGrid, BookmarkSection, BookmarkCard, BookmarkForm
-│   ├── Header/        # Header, Clock, SearchBar
-│   ├── Notes/         # QuickNotes
-│   ├── Settings/      # SettingsModal
-│   ├── UI/            # GlassCard, Modal, Button
-│   └── Wallpaper/     # WallpaperPicker
-├── context/           # AppContext (global state)
-├── hooks/             # useClock, useBookmarks, useStorage
-└── utils/             # storage, bookmarkImporter, constants, defaults
-```
-
----
-
-## 🚀 Build Instructions
-
-### Prerequisites
-- **Node.js** 18+ installed
-- **npm** 9+ installed
-
-### 1. Install Dependencies
+### 2. Clone and Install
+If you are setting this up on a new machine:
 ```bash
-cd BookMarksManager
+git clone https://github.com/sumanthangadi/BookmarksManager.git
+cd BookmarksManager
 npm install
 ```
 
-### 2. Development (preview in browser)
-```bash
-npm run dev
+### 3. Environment Variables
+Create a `.env` file in the root directory (this is already done on your current setup) and add your Firebase credentials:
+```env
+VITE_FIREBASE_API_KEY="..."
+VITE_FIREBASE_AUTH_DOMAIN="..."
+VITE_FIREBASE_PROJECT_ID="..."
+VITE_FIREBASE_STORAGE_BUCKET="..."
+VITE_FIREBASE_MESSAGING_SENDER_ID="..."
+VITE_FIREBASE_APP_ID="..."
+VITE_FIREBASE_MEASUREMENT_ID="..."
 ```
-Open `http://localhost:5173/newtab.html` in your browser.
 
-> **Note:** Chrome extension APIs (bookmarks, storage) won't work in dev mode. The app automatically falls back to `localStorage` for development.
-
-### 3. Production Build
+### 4. Build the Project
+Run the following command to generate the production-ready extension:
 ```bash
 npm run build
 ```
-This generates a `dist/` folder ready to load as a Chrome extension.
+This will create a `dist` folder.
 
----
+### 5. Load into Chrome
+1. Open Google Chrome.
+2. Navigate to `chrome://extensions/`.
+3. Enable **Developer mode** (toggle in the top right).
+4. Click **Load unpacked**.
+5. Select the `dist` folder located inside your project directory.
 
-## 📦 Loading the Extension in Chrome / Brave
+## Development
+To run the project in development mode with hot-reloading:
+```bash
+npm run dev
+```
+Note: To see the "New Tab" experience, you must use the `dist` folder in the Chrome Extensions page.
 
-1. Run `npm run build` to generate the `dist/` folder
-2. Open your browser and go to `chrome://extensions/`
-3. Enable **Developer mode** (toggle in top-right corner)
-4. Click **"Load unpacked"**
-5. Select the `dist/` folder inside `BookMarksManager/`
-6. Open a **new tab** — your dashboard is now active! 🎉
-
-### Updating After Changes
-1. Run `npm run build` again
-2. Go to `chrome://extensions/`
-3. Click the **refresh icon** on the BookMarks Manager card
-
----
-
-## ⚙️ Configuration
-
-### Keyboard Shortcuts
-| Shortcut | Action |
-|---|---|
-| `Ctrl+K` / `⌘+K` | Focus search bar |
-| `Escape` | Close modals |
-| `Enter` (in search) | Search the web |
-
-### Settings Options
-- **Clock**: 12h/24h format, show/hide seconds
-- **Search Engine**: Google, DuckDuckGo, Bing
-- **Display**: Show/hide greeting, show/hide quick notes
-- **Wallpaper**: 8 gradient presets + custom image upload (max 5MB)
-- **User Name**: Personalized greeting ("Good Morning, John")
-- **Import**: Import Chrome/Brave bookmarks with folder → section mapping
-- **Reset**: Clear all data and restore defaults
-
----
-
-## 🔒 Permissions
-
-| Permission | Reason |
-|---|---|
-| `storage` | Save bookmarks, notes, settings persistently |
-| `bookmarks` | Import existing browser bookmarks |
-
-No data leaves your browser. Everything is stored locally.
-
----
-
-## 📄 License
-
-MIT
+## Technologies
+- **Frontend**: React, Vite, Tailwind CSS.
+- **Database**: Firebase Firestore.
+- **Icons**: Lucide React.
+- **Drag & Drop**: @dnd-kit.
