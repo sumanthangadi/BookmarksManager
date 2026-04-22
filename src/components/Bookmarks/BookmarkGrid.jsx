@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import {
   DndContext,
-  closestCenter,
+  closestCorners,
   KeyboardSensor,
   PointerSensor,
   useSensor,
@@ -112,6 +112,40 @@ export default function BookmarkGrid({ searchQuery }) {
     setActiveId(event.active.id);
   };
 
+  const handleDragOver = (event) => {
+    const { active, over } = event;
+    if (!over) return;
+
+    const activeId = active.id;
+    const overId = over.id;
+
+    if (activeId === overId) return;
+
+    const activeBookmark = state.bookmarks.find((b) => b.id === activeId);
+    if (!activeBookmark) return;
+
+    // Check if dragging over a section droppable
+    const overSection = state.sections.find((s) => s.id === overId);
+    const overBookmark = state.bookmarks.find((b) => b.id === overId);
+
+    if (overSection && activeBookmark.sectionId !== overSection.id) {
+      // Move to a different section (empty or header)
+      const updated = state.bookmarks.map((b) =>
+        b.id === activeId ? { ...b, sectionId: overSection.id } : b
+      );
+      reorderBookmarks(updated);
+      return;
+    }
+
+    if (overBookmark && activeBookmark.sectionId !== overBookmark.sectionId) {
+      // Move to a different section (over another bookmark)
+      const updated = state.bookmarks.map((b) =>
+        b.id === activeId ? { ...b, sectionId: overBookmark.sectionId } : b
+      );
+      reorderBookmarks(updated);
+    }
+  };
+
   const handleDragEnd = (event) => {
     const { active, over } = event;
     setActiveId(null);
@@ -185,8 +219,9 @@ export default function BookmarkGrid({ searchQuery }) {
       <div className="w-full">
         <DndContext
           sensors={sensors}
-          collisionDetection={closestCenter}
+          collisionDetection={closestCorners}
           onDragStart={handleDragStart}
+          onDragOver={handleDragOver}
           onDragEnd={handleDragEnd}
         >
           {/* Bookmark Sections Grid */}
@@ -218,7 +253,7 @@ export default function BookmarkGrid({ searchQuery }) {
             )}
           </div>
 
-          <DragOverlay dropAnimation={null}>
+          <DragOverlay>
             {activeId ? (
               activeSection ? (
                 <div className="w-[300px] opacity-80 rotate-3 scale-105 pointer-events-none">
