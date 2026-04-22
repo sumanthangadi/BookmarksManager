@@ -133,44 +133,44 @@ export default function BookmarkGrid({ searchQuery }) {
       return;
     }
 
+    // Bookmark dragging logic
     const activeBookmark = state.bookmarks.find((b) => b.id === active.id);
-    const overBookmark = state.bookmarks.find((b) => b.id === over.id);
-
     if (!activeBookmark) return;
 
-    // If dropping onto a section droppable (not a bookmark)
+    // Check if dropping onto a section header/empty space (droppable)
     const overSection = state.sections.find((s) => s.id === over.id);
+    
     if (overSection) {
-      // Move to new section
-      const updated = state.bookmarks.map((b) =>
-        b.id === active.id ? { ...b, sectionId: overSection.id } : b
-      );
-      reorderBookmarks(updated);
+      // Move to the end of the new section
+      const otherBookmarks = state.bookmarks.filter((b) => b.id !== active.id);
+      const updatedBookmark = { ...activeBookmark, sectionId: overSection.id };
+      reorderBookmarks([...otherBookmarks, updatedBookmark]);
       return;
     }
 
+    const overBookmark = state.bookmarks.find((b) => b.id === over.id);
     if (!overBookmark) return;
 
-    if (activeBookmark.sectionId === overBookmark.sectionId) {
-      // Same section: reorder
-      const sectionBookmarks = state.bookmarks.filter(
-        (b) => b.sectionId === activeBookmark.sectionId
-      );
-      const otherBookmarks = state.bookmarks.filter(
-        (b) => b.sectionId !== activeBookmark.sectionId
-      );
-      const oldIndex = sectionBookmarks.findIndex((b) => b.id === active.id);
-      const newIndex = sectionBookmarks.findIndex((b) => b.id === over.id);
-      const reordered = arrayMove(sectionBookmarks, oldIndex, newIndex);
-      reorderBookmarks([...otherBookmarks, ...reordered]);
-    } else {
-      // Cross-section: move bookmark to new section
-      const updated = state.bookmarks.map((b) =>
-        b.id === active.id ? { ...b, sectionId: overBookmark.sectionId } : b
-      );
-      reorderBookmarks(updated);
+    // Move within same section or to a specific position in a different section
+    const oldIndex = state.bookmarks.findIndex((b) => b.id === active.id);
+    const newIndex = state.bookmarks.findIndex((b) => b.id === over.id);
+    
+    if (oldIndex !== -1 && newIndex !== -1) {
+      let updatedBookmarks = [...state.bookmarks];
+      
+      // If moving cross-section, update the sectionId first
+      if (activeBookmark.sectionId !== overBookmark.sectionId) {
+        updatedBookmarks[oldIndex] = { ...activeBookmark, sectionId: overBookmark.sectionId };
+      }
+      
+      const reordered = arrayMove(updatedBookmarks, oldIndex, newIndex);
+      reorderBookmarks(reordered);
     }
   };
+
+  // Find the active item for the overlay
+  const activeSection = state.sections.find(s => s.id === activeId);
+  const activeBookmark = state.bookmarks.find(b => b.id === activeId);
 
   // Sort sections by order (already defined above but needed here too)
   const sortedSectionsList = [...state.sections].sort((a, b) => a.order - b.order);
@@ -217,6 +217,31 @@ export default function BookmarkGrid({ searchQuery }) {
               </button>
             )}
           </div>
+
+          <DragOverlay dropAnimation={null}>
+            {activeId ? (
+              activeSection ? (
+                <div className="w-[300px] opacity-80 rotate-3 scale-105 pointer-events-none">
+                  <BookmarkSection
+                    section={activeSection}
+                    bookmarks={getFilteredBookmarks(activeSection.id)}
+                    onAddBookmark={() => {}}
+                    onEditBookmark={() => {}}
+                    onDeleteBookmark={() => {}}
+                    onDeleteSection={() => {}}
+                  />
+                </div>
+              ) : activeBookmark ? (
+                <div className="w-[250px] opacity-80 rotate-2 scale-105 pointer-events-none">
+                  <BookmarkCard
+                    bookmark={activeBookmark}
+                    onEdit={() => {}}
+                    onDelete={() => {}}
+                  />
+                </div>
+              ) : null
+            ) : null}
+          </DragOverlay>
         </DndContext>
 
         {/* No search results message */}
