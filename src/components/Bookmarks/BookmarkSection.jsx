@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { useDroppable } from '@dnd-kit/core';
 import { Plus, Trash2, ChevronDown, ChevronUp, GripHorizontal } from 'lucide-react';
 import * as Icons from 'lucide-react';
 import GlassCard from '../UI/GlassCard';
@@ -16,21 +15,13 @@ export default function BookmarkSection({
   onDeleteSection,
   isFiltered,
 }) {
-  const [collapsed, setCollapsed] = useState(false);
-  const [expanded, setExpanded] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
-  // For dropping bookmarks into the section
-  const { setNodeRef: setDroppableRef } = useDroppable({ 
-    id: section.id,
-    data: { type: 'Section', section }
-  });
-
-  // For dragging the section itself
+  // For dragging the section itself and handling bookmark drops
   const {
     attributes,
     listeners,
-    setNodeRef: setSortableRef,
+    setNodeRef,
     transform,
     transition,
     isDragging,
@@ -40,22 +31,21 @@ export default function BookmarkSection({
   });
 
   const style = {
-    transform: CSS.Transform.toString(transform),
+    // Use Translate (not Transform) to avoid scale distortion while dragging sections
+    transform: CSS.Translate.toString(transform),
     transition,
-    opacity: isDragging ? 0.5 : 1,
+    opacity: isDragging ? 0.4 : 1,
+    // Prevent the ghost from collapsing to zero-height
+    zIndex: isDragging ? 999 : undefined,
   };
 
   // Get the icon component dynamically
   const IconComponent = Icons[section.icon] || Icons.Folder;
 
-  const MAX_VISIBLE = 7;
-  const visibleBookmarks = expanded ? bookmarks : bookmarks.slice(0, MAX_VISIBLE);
-  const hasMore = bookmarks.length > MAX_VISIBLE;
-
   const bookmarkIds = bookmarks.map((b) => b.id);
 
   return (
-    <div ref={setSortableRef} style={style} className="h-full">
+    <div ref={setNodeRef} style={style} className="h-full">
       <GlassCard
         className={`h-full flex flex-col animate-fade-in ${isDragging ? 'shadow-xl shadow-brand-900/20 z-50 ring-2 ring-brand-500/50' : ''}`}
         padding="p-0"
@@ -90,14 +80,6 @@ export default function BookmarkSection({
             <Plus size={15} />
           </button>
 
-          <button
-            onClick={() => hasMore ? setExpanded(!expanded) : setCollapsed(!collapsed)}
-            className="p-1.5 rounded-lg text-gray-500 hover:text-gray-300 hover:bg-white/5 transition-colors"
-            aria-label={hasMore ? (expanded ? 'Compress section' : 'Extend section') : (collapsed ? 'Expand section' : 'Collapse section')}
-          >
-            {(hasMore ? !expanded : collapsed) ? <ChevronDown size={15} /> : <ChevronUp size={15} />}
-          </button>
-
           {!confirmDelete ? (
             <button
               onClick={() => setConfirmDelete(true)}
@@ -126,40 +108,24 @@ export default function BookmarkSection({
       </div>
 
       {/* Bookmark List */}
-      {!collapsed && (
-        <div ref={setDroppableRef} className="p-1.5 min-h-[20px] flex-1 flex flex-col gap-0.5">
-          {bookmarks.length > 0 ? (
-            <>
-              <SortableContext items={bookmarkIds} strategy={verticalListSortingStrategy}>
-                {visibleBookmarks.map((bookmark) => (
-                  <BookmarkCard
-                    key={bookmark.id}
-                    bookmark={bookmark}
-                    onEdit={onEditBookmark}
-                    onDelete={onDeleteBookmark}
-                  />
-                ))}
-              </SortableContext>
-              
-              {hasMore && (
-                <div className="mt-2 flex justify-center">
-                  <button
-                    onClick={() => setExpanded(!expanded)}
-                    className="text-xs text-brand-400 hover:text-brand-300 px-3 py-1.5 rounded-md hover:bg-brand-900/20 transition-colors flex items-center gap-1"
-                  >
-                    {expanded ? 'Show Less' : `Show ${bookmarks.length - MAX_VISIBLE} More`}
-                    {expanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-                  </button>
-                </div>
-              )}
-            </>
-          ) : (
+      <div className="p-1.5 min-h-[20px] max-h-[320px] overflow-y-auto custom-scrollbar flex-1 flex flex-col gap-0.5">
+        {bookmarks.length > 0 ? (
+          <SortableContext items={bookmarkIds} strategy={verticalListSortingStrategy}>
+            {bookmarks.map((bookmark) => (
+              <BookmarkCard
+                key={bookmark.id}
+                bookmark={bookmark}
+                onEdit={onEditBookmark}
+                onDelete={onDeleteBookmark}
+              />
+            ))}
+          </SortableContext>
+        ) : (
             <p className="text-center text-gray-600 text-xs py-4 italic">
               {isFiltered ? 'No matches found' : 'No bookmarks yet. Click + to add one.'}
             </p>
           )}
         </div>
-      )}
       </GlassCard>
     </div>
   );

@@ -3,8 +3,10 @@ import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { GripVertical, Pencil, Trash2, ExternalLink } from 'lucide-react';
 import { getFaviconUrl } from '../../utils/constants';
+import { useApp } from '../../context/AppContext';
 
 export default function BookmarkCard({ bookmark, onEdit, onDelete }) {
+  const { state } = useApp();
   const [isHovered, setIsHovered] = useState(false);
 
   const {
@@ -28,7 +30,12 @@ export default function BookmarkCard({ bookmark, onEdit, onDelete }) {
   const handleClick = (e) => {
     // Don't navigate if clicking action buttons
     if (e.target.closest('[data-action]')) return;
-    window.open(bookmark.url, '_blank', 'noopener,noreferrer');
+    
+    if (state.settings.openInNewTab) {
+      window.open(bookmark.url, '_blank', 'noopener,noreferrer');
+    } else {
+      window.location.href = bookmark.url;
+    }
   };
 
   const favicon = getFaviconUrl(bookmark.url);

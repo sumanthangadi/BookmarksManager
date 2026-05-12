@@ -86,6 +86,9 @@ export const DEFAULT_SETTINGS = {
   showGreeting: true,
   showNotes: true,
   userName: '',
+  openInNewTab: true,
+  pexelsQuery: 'nature',
+  pexelsData: null,
 };
 
 export const DEFAULT_NOTES = '';

@@ -10,6 +10,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         newtab: resolve(__dirname, 'newtab.html'),
+        popup: resolve(__dirname, 'popup.html'),
       },
       output: {
         entryFileNames: 'assets/[name].js',

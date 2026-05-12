@@ -188,6 +188,17 @@ export default function SettingsModal({ isOpen, onClose }) {
                 className="accent-brand-500 w-4 h-4"
               />
             </label>
+            <label className="flex items-center justify-between cursor-pointer group py-1">
+              <span className="text-sm text-gray-400 group-hover:text-gray-200 transition-colors">
+                Open links in new tab
+              </span>
+              <input
+                type="checkbox"
+                checked={state.settings.openInNewTab}
+                onChange={(e) => updateSettings({ openInNewTab: e.target.checked })}
+                className="accent-brand-500 w-4 h-4"
+              />
+            </label>
           </div>
         </section>
 

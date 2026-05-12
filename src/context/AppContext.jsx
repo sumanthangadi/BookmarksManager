@@ -182,6 +182,28 @@ export function AppProvider({ children }) {
     loadState();
   }, []);
 
+  // Listen for external storage changes (e.g. from popup) to keep state in sync
+  useEffect(() => {
+    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.onChanged) {
+      const handleStorageChange = (changes, area) => {
+        if (area === 'local') {
+          const payload = {};
+          if (changes.sections) payload.sections = changes.sections.newValue;
+          if (changes.bookmarks) payload.bookmarks = changes.bookmarks.newValue;
+          if (changes.notes) payload.notes = changes.notes.newValue;
+          if (changes.settings) payload.settings = changes.settings.newValue;
+
+          if (Object.keys(payload).length > 0) {
+            dispatch({ type: ACTIONS.SET_STATE, payload });
+          }
+        }
+      };
+
+      chrome.storage.onChanged.addListener(handleStorageChange);
+      return () => chrome.storage.onChanged.removeListener(handleStorageChange);
+    }
+  }, []);
+
   // Debounced auto-save to storage on state changes
   useEffect(() => {
     if (!initialized.current) return;
@@ -204,7 +226,21 @@ export function AppProvider({ children }) {
     };
   }, [state]);
 
-  // Memoized action creators
+    // Memoized action creators
+    const saveStateNow = useCallback(async (stateToSave) => {
+      if (!initialized.current) return;
+      try {
+        await setStorageData({
+          sections: stateToSave.sections,
+          bookmarks: stateToSave.bookmarks,
+          notes: stateToSave.notes,
+          settings: stateToSave.settings,
+        });
+      } catch (err) {
+        console.error('Failed to save state immediately:', err);
+      }
+    }, []);
+
   const actions = {
     addBookmark: useCallback((bookmark) => dispatch({ type: ACTIONS.ADD_BOOKMARK, payload: bookmark }), []),
     editBookmark: useCallback((bookmark) => dispatch({ type: ACTIONS.EDIT_BOOKMARK, payload: bookmark }), []),
@@ -219,6 +255,7 @@ export function AppProvider({ children }) {
     updateSettings: useCallback((settings) => dispatch({ type: ACTIONS.UPDATE_SETTINGS, payload: settings }), []),
     importBookmarks: useCallback((data) => dispatch({ type: ACTIONS.IMPORT_BOOKMARKS, payload: data }), []),
     resetAll: useCallback(() => dispatch({ type: ACTIONS.RESET_ALL }), []),
+    saveStateNow,
   };
 
   return (

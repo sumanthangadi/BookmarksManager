@@ -177,6 +177,12 @@
     border-color: rgba(220, 38, 38, 0.4);
     color: #fee2e2;
   }
+
+  /* Ensure select options are readable in dark theme */
+  select option {
+    background-color: #1a1a1a;
+    color: white;
+  }
 }
 
 /* ========================================
@@ -198,6 +204,24 @@
 
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(220, 38, 38, 0.4);
+}
+
+/* Custom Scrollbar Utility */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
 }
 
 /* ========================================

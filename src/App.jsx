@@ -14,6 +14,10 @@ function Dashboard() {
 
   // Compute wallpaper background style
   const wallpaperStyle = useMemo(() => {
+    if (state.settings.wallpaperId === 'pexels' && state.settings.pexelsData) {
+       return { backgroundImage: `url(${state.settings.pexelsData.url})` };
+    }
+
     if (state.settings.customWallpaper) {
       return { backgroundImage: `url(${state.settings.customWallpaper})` };
     }
@@ -24,7 +28,7 @@ function Dashboard() {
     }
 
     return { background: PRESET_WALLPAPERS[0].value };
-  }, [state.settings.wallpaperId, state.settings.customWallpaper]);
+  }, [state.settings.wallpaperId, state.settings.customWallpaper, state.settings.pexelsData]);
 
   return (
     <div className="relative min-h-screen">
@@ -47,7 +51,29 @@ function Dashboard() {
         </main>
 
         {/* Footer */}
-        <footer className="relative z-10 px-4 py-4 text-center">
+        <footer className="relative z-10 px-4 py-4 text-center space-y-2">
+          {state.settings.wallpaperId === 'pexels' && state.settings.pexelsData && (
+            <p className="text-[10px] text-gray-500 animate-fade-in">
+              Photo by{' '}
+              <a 
+                href={state.settings.pexelsData.photographerUrl} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-brand-400 hover:underline"
+              >
+                {state.settings.pexelsData.photographer}
+              </a>{' '}
+              on{' '}
+              <a 
+                href="https://www.pexels.com" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-brand-400 hover:underline"
+              >
+                Pexels
+              </a>
+            </p>
+          )}
           <p className="text-[11px] text-gray-700">
             BookMarks Manager — Press{' '}
             <kbd className="px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-gray-500 font-mono text-[10px]">
