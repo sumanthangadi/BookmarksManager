@@ -35,16 +35,18 @@ export default function Modal({ isOpen, onClose, title, children, maxWidth = 'ma
 
       {/* Modal content */}
       <div
-        className={`relative w-full ${maxWidth} glass p-0 animate-scale-in overflow-hidden`}
+        className={`relative w-full ${maxWidth} glass p-0 animate-scale-in overflow-hidden rounded-[32px]`}
+        style={{ boxShadow: 'none', border: '1px solid var(--glass-border)' }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
         {title && (
-          <div className="flex items-center justify-between px-6 py-4 border-b border-white/5">
-            <h2 className="text-lg font-semibold text-white">{title}</h2>
+          <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: 'var(--glass-border)' }}>
+            <h2 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>{title}</h2>
             <button
               onClick={onClose}
-              className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
+              className="p-1.5 rounded-lg transition-colors"
+              style={{ color: 'var(--text-secondary)' }}
               aria-label="Close modal"
             >
               <X size={18} />

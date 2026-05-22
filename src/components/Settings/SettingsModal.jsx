@@ -5,7 +5,6 @@ import {
   RefreshCw,
   RotateCcw,
   Clock,
-  Search,
   Eye,
   StickyNote,
   User,
@@ -17,9 +16,12 @@ import WallpaperPicker from '../Wallpaper/WallpaperPicker';
 import { useApp } from '../../context/AppContext';
 import { importBrowserBookmarks, isBookmarksApiAvailable } from '../../utils/bookmarkImporter';
 import { SEARCH_ENGINES } from '../../utils/constants';
+import { useTheme } from '../../context/ThemeContext';
+import { THEMES } from '../../styles/themes';
 
 export default function SettingsModal({ isOpen, onClose }) {
   const { state, updateSettings, importBookmarks, resetAll } = useApp();
+  const { themeId, setTheme } = useTheme();
   const [importStatus, setImportStatus] = useState(null);
   const [confirmReset, setConfirmReset] = useState(false);
   const bookmarksAvailable = isBookmarksApiAvailable();
@@ -48,21 +50,63 @@ export default function SettingsModal({ isOpen, onClose }) {
     }
   };
 
+  const sectionLabelStyle = { color: 'var(--text-primary)', fontWeight: '600' };
+  const descriptionStyle = { color: 'var(--text-secondary)', fontSize: '0.875rem' };
+  const dividerStyle = { borderColor: 'var(--glass-border)', opacity: 0.5 };
+
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Settings" maxWidth="max-w-2xl">
       <div className="space-y-8">
-        {/* ───── Wallpaper ───── */}
-        <section>
-          <WallpaperPicker />
+        {/* ───── Theme ───── */}
+        <section className="space-y-3">
+          <div className="flex items-center gap-2">
+            <Image size={16} style={{ color: 'var(--accent-color)' }} />
+            <h4 className="text-sm font-medium" style={sectionLabelStyle}>Theme</h4>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            {Object.values(THEMES).map((themeOption) => (
+              <button
+                key={themeOption.id}
+                onClick={() => setTheme(themeOption.id)}
+                className="w-full flex items-center justify-between px-4 py-3 rounded-2xl transition-all min-h-[48px]"
+                style={
+                  themeId === themeOption.id
+                    ? { border: '2px solid var(--accent-color)', background: 'var(--bg-secondary)' }
+                    : { border: '1px solid var(--glass-border)', background: 'var(--input-bg)' }
+                }
+              >
+                <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{themeOption.name}</span>
+                <div className="flex -space-x-1">
+                  <div className="w-4 h-4 rounded-full border border-gray-600" style={{ backgroundColor: themeOption.colors['--bg-primary'] }} />
+                  <div className="w-4 h-4 rounded-full border border-gray-600" style={{ backgroundColor: themeOption.colors['--glass-bg'] }} />
+                  <div className="w-4 h-4 rounded-full border border-gray-600" style={{ backgroundColor: themeOption.colors['--accent-color'] }} />
+                </div>
+              </button>
+            ))}
+          </div>
         </section>
 
-        <hr className="border-white/5" />
+        <hr style={dividerStyle} />
+
+        {/* ───── Wallpaper ───── */}
+        {THEMES[themeId]?.disableWallpaper ? (
+          <section className="space-y-3 opacity-50 pointer-events-none">
+            <h4 className="text-sm font-medium" style={sectionLabelStyle}>Wallpaper</h4>
+            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Wallpapers are disabled for the {THEMES[themeId]?.name} theme to maintain its signature clean look.</p>
+          </section>
+        ) : (
+          <section>
+            <WallpaperPicker themeId={themeId} />
+          </section>
+        )}
+
+        <hr style={dividerStyle} />
 
         {/* ───── User Name ───── */}
         <section className="space-y-3">
           <div className="flex items-center gap-2">
-            <User size={16} className="text-brand-400" />
-            <h4 className="text-sm font-medium text-gray-300">Your Name</h4>
+            <User size={16} style={{ color: 'var(--accent-color)' }} />
+            <h4 className="text-sm font-medium" style={sectionLabelStyle}>Your Name</h4>
           </div>
           <input
             type="text"
@@ -74,143 +118,86 @@ export default function SettingsModal({ isOpen, onClose }) {
           />
         </section>
 
-        <hr className="border-white/5" />
+        <hr style={dividerStyle} />
 
         {/* ───── Clock Settings ───── */}
         <section className="space-y-3">
           <div className="flex items-center gap-2">
-            <Clock size={16} className="text-brand-400" />
-            <h4 className="text-sm font-medium text-gray-300">Clock</h4>
+            <Clock size={16} style={{ color: 'var(--accent-color)' }} />
+            <h4 className="text-sm font-medium" style={sectionLabelStyle}>Clock</h4>
           </div>
           <div className="flex flex-wrap gap-4">
-            <label className="flex items-center gap-2 cursor-pointer group">
-              <input
-                type="radio"
-                name="clockFormat"
-                value="12h"
-                checked={state.settings.clockFormat === '12h'}
-                onChange={() => updateSettings({ clockFormat: '12h' })}
-                className="accent-brand-500"
-              />
-              <span className="text-sm text-gray-400 group-hover:text-gray-200 transition-colors">
-                12-hour
-              </span>
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer group">
-              <input
-                type="radio"
-                name="clockFormat"
-                value="24h"
-                checked={state.settings.clockFormat === '24h'}
-                onChange={() => updateSettings({ clockFormat: '24h' })}
-                className="accent-brand-500"
-              />
-              <span className="text-sm text-gray-400 group-hover:text-gray-200 transition-colors">
-                24-hour
-              </span>
-            </label>
+            {['12h', '24h'].map(format => (
+              <label key={format} className="flex items-center gap-2 cursor-pointer group">
+                <input
+                  type="radio"
+                  name="clockFormat"
+                  value={format}
+                  checked={state.settings.clockFormat === format}
+                  onChange={() => updateSettings({ clockFormat: format })}
+                  className="accent-brand-500"
+                  style={{ accentColor: 'var(--accent-color)' }}
+                />
+                <span className="text-sm transition-colors" style={{ color: 'var(--text-secondary)' }}>
+                  {format === '12h' ? '12-hour' : '24-hour'}
+                </span>
+              </label>
+            ))}
             <label className="flex items-center gap-2 cursor-pointer group">
               <input
                 type="checkbox"
                 checked={state.settings.showSeconds}
                 onChange={(e) => updateSettings({ showSeconds: e.target.checked })}
                 className="accent-brand-500"
+                style={{ accentColor: 'var(--accent-color)' }}
               />
-              <span className="text-sm text-gray-400 group-hover:text-gray-200 transition-colors">
+              <span className="text-sm transition-colors" style={{ color: 'var(--text-secondary)' }}>
                 Show seconds
               </span>
             </label>
           </div>
         </section>
 
-        <hr className="border-white/5" />
+        <hr style={dividerStyle} />
 
-        {/* ───── Search Engine ───── */}
+
+
+        {/* ───── Toggles ───── */}
         <section className="space-y-3">
           <div className="flex items-center gap-2">
-            <Search size={16} className="text-brand-400" />
-            <h4 className="text-sm font-medium text-gray-300">Search Engine</h4>
+            <Eye size={16} style={{ color: 'var(--accent-color)' }} />
+            <h4 className="text-sm font-medium" style={sectionLabelStyle}>Display</h4>
           </div>
-          <div className="flex flex-wrap gap-3">
-            {Object.entries(SEARCH_ENGINES).map(([key, engine]) => (
-              <label
-                key={key}
-                className={`
-                  flex items-center gap-2 px-4 py-2 rounded-xl cursor-pointer transition-all text-sm
-                  ${state.settings.searchEngine === key
-                    ? 'bg-brand-600/20 text-brand-300 border border-brand-600/30'
-                    : 'bg-white/5 text-gray-400 border border-white/5 hover:bg-white/10 hover:text-gray-200'
-                  }
-                `}
-              >
+          <div className="space-y-2">
+            {[
+              { label: 'Show greeting', key: 'showGreeting' },
+              { label: 'Open links in new tab', key: 'openInNewTab' }
+            ].map(item => (
+              <label key={item.key} className="flex items-center justify-between cursor-pointer group py-1">
+                <span className="text-sm transition-colors" style={{ color: 'var(--text-secondary)' }}>
+                  {item.label}
+                </span>
                 <input
-                  type="radio"
-                  name="searchEngine"
-                  value={key}
-                  checked={state.settings.searchEngine === key}
-                  onChange={() => updateSettings({ searchEngine: key })}
-                  className="hidden"
+                  type="checkbox"
+                  checked={state.settings[item.key]}
+                  onChange={(e) => updateSettings({ [item.key]: e.target.checked })}
+                  className="w-4 h-4"
+                  style={{ accentColor: 'var(--accent-color)' }}
                 />
-                {engine.name}
               </label>
             ))}
           </div>
         </section>
 
-        <hr className="border-white/5" />
-
-        {/* ───── Toggles ───── */}
-        <section className="space-y-3">
-          <div className="flex items-center gap-2">
-            <Eye size={16} className="text-brand-400" />
-            <h4 className="text-sm font-medium text-gray-300">Display</h4>
-          </div>
-          <div className="space-y-2">
-            <label className="flex items-center justify-between cursor-pointer group py-1">
-              <span className="text-sm text-gray-400 group-hover:text-gray-200 transition-colors">
-                Show greeting
-              </span>
-              <input
-                type="checkbox"
-                checked={state.settings.showGreeting}
-                onChange={(e) => updateSettings({ showGreeting: e.target.checked })}
-                className="accent-brand-500 w-4 h-4"
-              />
-            </label>
-            <label className="flex items-center justify-between cursor-pointer group py-1">
-              <span className="text-sm text-gray-400 group-hover:text-gray-200 transition-colors">
-                Show quick notes
-              </span>
-              <input
-                type="checkbox"
-                checked={state.settings.showNotes}
-                onChange={(e) => updateSettings({ showNotes: e.target.checked })}
-                className="accent-brand-500 w-4 h-4"
-              />
-            </label>
-            <label className="flex items-center justify-between cursor-pointer group py-1">
-              <span className="text-sm text-gray-400 group-hover:text-gray-200 transition-colors">
-                Open links in new tab
-              </span>
-              <input
-                type="checkbox"
-                checked={state.settings.openInNewTab}
-                onChange={(e) => updateSettings({ openInNewTab: e.target.checked })}
-                className="accent-brand-500 w-4 h-4"
-              />
-            </label>
-          </div>
-        </section>
-
-        <hr className="border-white/5" />
+        <hr style={dividerStyle} />
 
         {/* ───── Import Bookmarks ───── */}
         <section className="space-y-3">
           <div className="flex items-center gap-2">
-            <Download size={16} className="text-brand-400" />
-            <h4 className="text-sm font-medium text-gray-300">Import Browser Bookmarks</h4>
+            <Download size={16} style={{ color: 'var(--accent-color)' }} />
+            <h4 className="text-sm font-medium" style={sectionLabelStyle}>Import Browser Bookmarks</h4>
           </div>
-          <p className="text-xs text-gray-500">
+          <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
             Import your existing Chrome/Brave bookmarks. Folder names become sections.
           </p>
           <div className="flex items-center gap-3">
@@ -230,15 +217,15 @@ export default function SettingsModal({ isOpen, onClose }) {
           </div>
         </section>
 
-        <hr className="border-white/5" />
+        <hr style={dividerStyle} />
 
         {/* ───── Reset ───── */}
         <section className="space-y-3">
           <div className="flex items-center gap-2">
             <RotateCcw size={16} className="text-red-400" />
-            <h4 className="text-sm font-medium text-gray-300">Reset All Data</h4>
+            <h4 className="text-sm font-medium" style={sectionLabelStyle}>Reset All Data</h4>
           </div>
-          <p className="text-xs text-gray-500">
+          <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
             This will delete all your bookmarks, notes, and settings. This cannot be undone.
           </p>
           <Button
@@ -250,12 +237,12 @@ export default function SettingsModal({ isOpen, onClose }) {
           </Button>
         </section>
 
-        <hr className="border-white/5" />
+        <hr style={dividerStyle} />
 
         {/* ───── About ───── */}
-        <section className="flex items-center gap-3 text-xs text-gray-600">
+        <section className="flex items-center gap-3 text-xs" style={{ color: 'var(--text-muted)' }}>
           <Info size={14} />
-          <span>BookMarks Manager v1.0.0 — Your premium new tab dashboard</span>
+          <span>Folio v1.0.0 — Your premium new tab dashboard</span>
         </section>
       </div>
     </Modal>

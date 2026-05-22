@@ -1,7 +1,7 @@
 // Preset wallpapers — CSS gradients to keep extension lightweight
 export const PRESET_WALLPAPERS = [
   {
-    id: 'default',
+    id: 'midnight-red',
     name: 'Midnight Red',
     type: 'gradient',
     value: 'linear-gradient(135deg, #0a0a0a 0%, #1a0505 40%, #2d0a0a 70%, #0a0a0a 100%)',

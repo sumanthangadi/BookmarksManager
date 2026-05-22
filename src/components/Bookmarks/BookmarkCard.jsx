@@ -45,7 +45,7 @@ export default function BookmarkCard({ bookmark, onEdit, onDelete }) {
       ref={setNodeRef}
       style={style}
       className={`
-        group flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer
+        group flex items-center gap-2 px-2 py-1.5 rounded-2xl cursor-pointer
         transition-all duration-200
         hover:bg-white/[0.06] hover:shadow-sm
         ${isDragging ? 'shadow-lg shadow-brand-900/20 z-50' : ''}
@@ -59,17 +59,18 @@ export default function BookmarkCard({ bookmark, onEdit, onDelete }) {
         {...attributes}
         {...listeners}
         className={`
-          flex-shrink-0 p-0.5 rounded cursor-grab active:cursor-grabbing
-          text-gray-600 hover:text-gray-400 transition-opacity duration-200
-          ${isHovered ? 'opacity-100' : 'opacity-0'}
+          flex-shrink-0 p-1 rounded-lg cursor-grab active:cursor-grabbing
+          transition-opacity duration-200
+          ${isHovered ? 'opacity-100' : 'opacity-40'}
         `}
+        style={{ color: 'var(--text-muted)' }}
         data-action="drag"
       >
         <GripVertical size={14} />
       </div>
 
       {/* Favicon */}
-      <div className="flex-shrink-0 w-5 h-5 rounded-[4px] bg-white/5 border border-white/5 flex items-center justify-center overflow-hidden">
+      <div className="flex-shrink-0 w-5 h-5 rounded-lg border flex items-center justify-center overflow-hidden" style={{ background: 'var(--input-bg)', borderColor: 'var(--glass-border)' }}>
         {favicon ? (
           <img
             src={favicon}
@@ -82,8 +83,8 @@ export default function BookmarkCard({ bookmark, onEdit, onDelete }) {
           />
         ) : null}
         <span
-          className="text-[10px] font-bold text-brand-300 uppercase"
-          style={{ display: favicon ? 'none' : 'flex' }}
+          className="text-[10px] font-bold uppercase"
+          style={{ color: 'var(--accent-color)', display: favicon ? 'none' : 'flex' }}
         >
           {bookmark.title.charAt(0)}
         </span>
@@ -91,7 +92,7 @@ export default function BookmarkCard({ bookmark, onEdit, onDelete }) {
 
       {/* Title */}
       <div className="flex-1 min-w-0">
-        <p className="text-xs text-gray-200 truncate font-medium group-hover:text-white transition-colors">
+        <p className="text-xs truncate font-medium transition-colors" style={{ color: 'var(--text-primary)' }}>
           {bookmark.title}
         </p>
       </div>

@@ -5,6 +5,8 @@ import { Plus, Trash2, ChevronDown, ChevronUp, GripHorizontal } from 'lucide-rea
 import * as Icons from 'lucide-react';
 import GlassCard from '../UI/GlassCard';
 import BookmarkCard from './BookmarkCard';
+import IconPicker from './IconPicker';
+import { useApp } from '../../context/AppContext';
 
 export default function BookmarkSection({
   section,
@@ -16,6 +18,8 @@ export default function BookmarkSection({
   isFiltered,
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [iconPickerOpen, setIconPickerOpen] = useState(false);
+  const { editSection } = useApp();
 
   // For dragging the section itself and handling bookmark drops
   const {
@@ -56,17 +60,22 @@ export default function BookmarkSection({
             <div 
               {...attributes} 
               {...listeners} 
-              className="p-1 -ml-2 cursor-grab active:cursor-grabbing text-gray-500 hover:text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity"
+              className="p-1 -ml-1 cursor-grab active:cursor-grabbing hover:opacity-100 transition-opacity"
+              style={{ color: 'var(--text-muted)', opacity: 0.5 }}
             >
               <GripHorizontal size={14} />
             </div>
-          <div className="p-1.5 rounded-lg bg-brand-600/15 text-brand-400">
-            <IconComponent size={16} />
-          </div>
-          <h3 className="text-sm font-semibold text-gray-200 tracking-wide">
+          <button 
+            onClick={() => setIconPickerOpen(true)}
+            className="p-1.5 rounded-lg bg-brand-500/10 hover:bg-brand-500/20 transition-colors group/icon" 
+            title="Change section icon"
+          >
+            <IconComponent size={16} className="text-brand-400 group-hover/icon:scale-110 transition-transform" />
+          </button>
+          <h3 className="text-sm font-semibold tracking-wide" style={{ color: 'var(--text-primary)' }}>
             {section.name}
           </h3>
-          <span className="text-[10px] text-gray-500 bg-white/5 px-1.5 py-0.5 rounded-full font-medium">
+          <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium" style={{ color: 'var(--text-secondary)', background: 'var(--input-bg)' }}>
             {bookmarks.length}
           </span>
         </div>
@@ -127,6 +136,13 @@ export default function BookmarkSection({
           )}
         </div>
       </GlassCard>
+
+      <IconPicker
+        isOpen={iconPickerOpen}
+        onClose={() => setIconPickerOpen(false)}
+        currentIcon={section.icon || 'Folder'}
+        onSelect={(newIcon) => editSection({ ...section, icon: newIcon })}
+      />
     </div>
   );
 }

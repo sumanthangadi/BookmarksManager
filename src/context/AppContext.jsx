@@ -63,7 +63,7 @@ function appReducer(state, action) {
 
     case ACTIONS.ADD_SECTION: {
       const newSection = {
-        id: `sec_${generateId()}`,
+        id: action.payload.id || `sec_${generateId()}`,
         name: action.payload.name || 'New Section',
         icon: action.payload.icon || 'Folder',
         order: state.sections.length,
@@ -124,15 +124,16 @@ function appReducer(state, action) {
 
 export function AppProvider({ children }) {
   const [state, dispatch] = useReducer(appReducer, getDefaultState());
+  const [isLoaded, setIsLoaded] = React.useState(false);
   const initialized = useRef(false);
   const saveTimeout = useRef(null);
-
+ 
   // Load state from storage on mount, auto-import Chrome bookmarks on first run
   useEffect(() => {
     const loadState = async () => {
       try {
         const stored = await getStorageData(['sections', 'bookmarks', 'notes', 'settings', '_initialized']);
-
+ 
         // If user has previously saved data, restore it
         if (stored._initialized) {
           const payload = {};
@@ -140,7 +141,7 @@ export function AppProvider({ children }) {
           if (stored.bookmarks) payload.bookmarks = stored.bookmarks;
           if (stored.notes !== undefined) payload.notes = stored.notes;
           if (stored.settings) payload.settings = { ...getDefaultState().settings, ...stored.settings };
-
+ 
           if (Object.keys(payload).length > 0) {
             dispatch({ type: ACTIONS.SET_STATE, payload });
           }
@@ -150,7 +151,7 @@ export function AppProvider({ children }) {
             try {
               console.log('[BookMarks Manager] First run — importing your browser bookmarks...');
               const imported = await importBrowserBookmarks();
-
+ 
               if (imported.bookmarks.length > 0) {
                 // Replace defaults with real bookmarks
                 dispatch({
@@ -175,13 +176,15 @@ export function AppProvider({ children }) {
         }
       } catch (err) {
         console.error('Failed to load state from storage:', err);
+      } finally {
+        initialized.current = true;
+        setIsLoaded(true);
       }
-      initialized.current = true;
     };
-
+ 
     loadState();
   }, []);
-
+ 
   // Listen for external storage changes (e.g. from popup) to keep state in sync
   useEffect(() => {
     if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.onChanged) {
@@ -192,26 +195,26 @@ export function AppProvider({ children }) {
           if (changes.bookmarks) payload.bookmarks = changes.bookmarks.newValue;
           if (changes.notes) payload.notes = changes.notes.newValue;
           if (changes.settings) payload.settings = changes.settings.newValue;
-
+ 
           if (Object.keys(payload).length > 0) {
             dispatch({ type: ACTIONS.SET_STATE, payload });
           }
         }
       };
-
+ 
       chrome.storage.onChanged.addListener(handleStorageChange);
       return () => chrome.storage.onChanged.removeListener(handleStorageChange);
     }
   }, []);
-
+ 
   // Debounced auto-save to storage on state changes
   useEffect(() => {
     if (!initialized.current) return;
-
+ 
     if (saveTimeout.current) {
       clearTimeout(saveTimeout.current);
     }
-
+ 
     saveTimeout.current = setTimeout(() => {
       setStorageData({
         sections: state.sections,
@@ -220,12 +223,12 @@ export function AppProvider({ children }) {
         settings: state.settings,
       }).catch((err) => console.error('Failed to save state:', err));
     }, 500);
-
+ 
     return () => {
       if (saveTimeout.current) clearTimeout(saveTimeout.current);
     };
   }, [state]);
-
+ 
     // Memoized action creators
     const saveStateNow = useCallback(async (stateToSave) => {
       if (!initialized.current) return;
@@ -240,7 +243,7 @@ export function AppProvider({ children }) {
         console.error('Failed to save state immediately:', err);
       }
     }, []);
-
+ 
   const actions = {
     addBookmark: useCallback((bookmark) => dispatch({ type: ACTIONS.ADD_BOOKMARK, payload: bookmark }), []),
     editBookmark: useCallback((bookmark) => dispatch({ type: ACTIONS.EDIT_BOOKMARK, payload: bookmark }), []),
@@ -257,9 +260,9 @@ export function AppProvider({ children }) {
     resetAll: useCallback(() => dispatch({ type: ACTIONS.RESET_ALL }), []),
     saveStateNow,
   };
-
+ 
   return (
-    <AppContext.Provider value={{ state, ...actions }}>
+    <AppContext.Provider value={{ state, isLoaded, ...actions }}>
       {children}
     </AppContext.Provider>
   );

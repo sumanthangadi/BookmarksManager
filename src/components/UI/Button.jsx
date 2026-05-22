@@ -4,7 +4,7 @@ const variants = {
   primary: 'btn-primary',
   ghost: 'btn-ghost',
   danger: 'btn-danger',
-  glass: 'glass glass-hover px-4 py-2 text-sm font-medium text-gray-200 cursor-pointer',
+  glass: 'glass glass-hover px-4 py-2 text-sm font-medium rounded-full cursor-pointer',
 };
 
 const sizes = {
@@ -29,7 +29,7 @@ export default function Button({
 }) {
   return (
     <button
-      className={`${variants[variant]} ${sizes[size]} ${disabled ? 'opacity-50 cursor-not-allowed' : ''} ${className}`}
+      className={`inline-flex items-center justify-center gap-2 ${variants[variant]} ${sizes[size]} ${disabled ? 'opacity-50 cursor-not-allowed' : ''} ${className}`}
       disabled={disabled || loading}
       {...props}
     >

@@ -49,13 +49,11 @@ export default function WallpaperPicker() {
     const file = e.target.files[0];
     if (!file) return;
 
-    // Check file size (max 5MB)
     if (file.size > 5 * 1024 * 1024) {
       alert('Image must be smaller than 5MB');
       return;
     }
 
-    // Check file type
     if (!file.type.startsWith('image/')) {
       alert('Please select an image file');
       return;
@@ -72,13 +70,40 @@ export default function WallpaperPicker() {
     reader.readAsDataURL(file);
   };
 
+  const labelStyle = { color: 'var(--text-primary)', fontWeight: '600' };
+  const sublabelStyle = { color: 'var(--text-secondary)' };
+
   return (
     <div className="space-y-6">
+      {/* ───── Theme Default ───── */}
+      <section className="flex items-center justify-between p-3 rounded-2xl border" style={{ borderColor: 'var(--glass-border)', background: 'var(--input-bg)' }}>
+        <div>
+          <h4 className="text-sm font-semibold" style={labelStyle}>Theme Default</h4>
+          <p className="text-xs mt-0.5" style={sublabelStyle}>Use the default background color for current theme</p>
+        </div>
+        <button
+          onClick={() => setWallpaper({ wallpaperId: 'none', customWallpaper: null, pexelsData: null })}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl border transition-all text-sm font-medium ${
+            activeId === 'none' ? 'shadow-lg' : 'hover:scale-105'
+          }`}
+          style={{ 
+            borderColor: activeId === 'none' ? 'var(--accent-color)' : 'var(--glass-border)',
+            backgroundColor: activeId === 'none' ? 'var(--accent-color)' : 'transparent',
+            color: activeId === 'none' ? '#fff' : 'var(--text-primary)'
+          }}
+        >
+          {activeId === 'none' && <Check size={14} />}
+          {activeId === 'none' ? 'Active' : 'Restore Default'}
+        </button>
+      </section>
+
+      <hr style={{ borderColor: 'var(--glass-border)', opacity: 0.5 }} />
+
       {/* ───── Pexels Wallpapers ───── */}
       <section className="space-y-4">
         <div className="flex items-center justify-between">
-          <h4 className="text-sm font-medium text-gray-300 flex items-center gap-2">
-            <ImageIcon size={16} className="text-brand-400" />
+          <h4 className="text-sm flex items-center gap-2" style={labelStyle}>
+            <ImageIcon size={16} style={{ color: 'var(--accent-color)' }} />
             Dynamic Pexels Wallpapers
           </h4>
           <form onSubmit={handleSearch} className="flex items-center gap-2">
@@ -87,15 +112,16 @@ export default function WallpaperPicker() {
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search Pexels..."
+                placeholder="Search..."
                 className="glass-input py-1.5 pl-3 pr-8 text-xs w-40"
               />
-              <Search size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-500" />
+              <Search size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-muted)' }} />
             </div>
             <button
               type="submit"
               disabled={isSearching}
-              className="p-2 rounded-lg bg-brand-600/20 text-brand-400 hover:bg-brand-600/30 transition-colors disabled:opacity-50"
+              className="p-2 rounded-xl transition-colors disabled:opacity-50"
+              style={{ background: 'var(--accent-color)', color: '#fff' }}
             >
               <RefreshCw size={14} className={isSearching ? 'animate-spin' : ''} />
             </button>
@@ -110,13 +136,10 @@ export default function WallpaperPicker() {
                 key={photo.id}
                 onClick={() => handleSelectPexels(photo)}
                 className={`
-                  relative aspect-video rounded-xl overflow-hidden border-2 transition-all duration-200
+                  relative aspect-video rounded-2xl overflow-hidden border-2 transition-all duration-200
                   hover:scale-105 hover:shadow-lg group
-                  ${isActive
-                    ? 'border-brand-500 shadow-brand-900/30 shadow-lg'
-                    : 'border-white/10 hover:border-white/20'
-                  }
                 `}
+                style={{ borderColor: isActive ? 'var(--accent-color)' : 'var(--glass-border)' }}
               >
                 <img
                   src={photo.preview}
@@ -129,30 +152,25 @@ export default function WallpaperPicker() {
                 </div>
                 {isActive && (
                   <div className="absolute inset-0 flex items-center justify-center bg-black/30">
-                    <Check size={16} className="text-brand-400" />
+                    <Check size={16} style={{ color: 'var(--accent-color)' }} />
                   </div>
                 )}
               </button>
             );
           })}
           {pexelsPhotos.length === 0 && !isSearching && (
-             <div className="col-span-4 py-8 text-center border-2 border-dashed border-white/5 rounded-2xl">
-                <p className="text-xs text-gray-600 italic">Enter a keyword and click refresh to find wallpapers</p>
+             <div className="col-span-4 py-8 text-center border-2 border-dashed rounded-[24px]" style={{ borderColor: 'var(--glass-border)' }}>
+                <p className="text-xs italic" style={sublabelStyle}>Enter a keyword to find wallpapers</p>
              </div>
-          )}
-          {isSearching && pexelsPhotos.length === 0 && (
-            <div className="col-span-4 py-8 flex justify-center">
-               <RefreshCw size={24} className="text-brand-500 animate-spin" />
-            </div>
           )}
         </div>
       </section>
 
-      <hr className="border-white/5" />
+      <hr style={{ borderColor: 'var(--glass-border)', opacity: 0.5 }} />
 
       {/* ───── Presets ───── */}
       <section className="space-y-3">
-        <h4 className="text-sm font-medium text-gray-300">Preset Gradients</h4>
+        <h4 className="text-sm" style={labelStyle}>Preset Gradients</h4>
         <div className="grid grid-cols-4 gap-2">
           {PRESET_WALLPAPERS.map((wp) => {
             const isActive = activeId === wp.id;
@@ -161,13 +179,10 @@ export default function WallpaperPicker() {
                 key={wp.id}
                 onClick={() => handleSelectPreset(wp)}
                 className={`
-                  relative aspect-video rounded-xl overflow-hidden border-2 transition-all duration-200
+                  relative aspect-video rounded-2xl overflow-hidden border-2 transition-all duration-200
                   hover:scale-105 hover:shadow-lg
-                  ${isActive
-                    ? 'border-brand-500 shadow-brand-900/30 shadow-lg'
-                    : 'border-white/10 hover:border-white/20'
-                  }
                 `}
+                style={{ borderColor: isActive ? 'var(--accent-color)' : 'var(--glass-border)' }}
               >
                 <div
                   className="absolute inset-0"
@@ -175,7 +190,7 @@ export default function WallpaperPicker() {
                 />
                 {isActive && (
                   <div className="absolute inset-0 flex items-center justify-center bg-black/30">
-                    <Check size={16} className="text-brand-400" />
+                    <Check size={16} style={{ color: 'var(--accent-color)' }} />
                   </div>
                 )}
                 <span className="absolute bottom-0.5 left-1 text-[8px] text-white/50 font-medium">
@@ -187,15 +202,16 @@ export default function WallpaperPicker() {
         </div>
       </section>
 
-      <hr className="border-white/5" />
+      <hr style={{ borderColor: 'var(--glass-border)', opacity: 0.5 }} />
 
       {/* ───── Custom upload ───── */}
       <section className="space-y-3">
-        <h4 className="text-sm font-medium text-gray-300">Custom Upload</h4>
+        <h4 className="text-sm" style={labelStyle}>Custom Upload</h4>
         <div className="flex items-center gap-3">
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl border border-dashed border-white/15 hover:border-brand-600/30 text-gray-400 hover:text-brand-300 transition-all text-sm"
+            className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl border border-dashed transition-all text-sm"
+            style={{ borderColor: 'var(--glass-border)', color: 'var(--text-secondary)' }}
           >
             <Upload size={16} />
             Upload File
@@ -210,25 +226,23 @@ export default function WallpaperPicker() {
 
           {state.settings.customWallpaper && (
             <div
-              className={`
-                relative w-16 aspect-video rounded-xl overflow-hidden border-2 transition-all
-                ${activeId === 'custom' ? 'border-brand-500' : 'border-white/10'}
-              `}
+              className="relative w-16 aspect-video rounded-2xl overflow-hidden border-2 transition-all"
+              style={{ borderColor: activeId === 'custom' ? 'var(--accent-color)' : 'var(--glass-border)' }}
             >
               <img
                 src={state.settings.customWallpaper}
-                alt="Custom wallpaper"
+                alt="Custom"
                 className="absolute inset-0 w-full h-full object-cover"
               />
               {activeId === 'custom' && (
                 <div className="absolute inset-0 flex items-center justify-center bg-black/30">
-                  <Check size={14} className="text-brand-400" />
+                  <Check size={14} style={{ color: 'var(--accent-color)' }} />
                 </div>
               )}
             </div>
           )}
         </div>
-        <p className="text-[11px] text-gray-600 text-center">
+        <p className="text-[11px] text-center" style={{ color: 'var(--text-muted)' }}>
           Max 5MB. Stored locally.
         </p>
       </section>

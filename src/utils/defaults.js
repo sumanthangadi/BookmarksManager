@@ -80,7 +80,7 @@ export const DEFAULT_BOOKMARKS = [
 export const DEFAULT_SETTINGS = {
   clockFormat: '12h',
   searchEngine: 'google',
-  wallpaperId: 'default',
+  wallpaperId: 'none',
   customWallpaper: null,
   showSeconds: true,
   showGreeting: true,
@@ -89,6 +89,7 @@ export const DEFAULT_SETTINGS = {
   openInNewTab: true,
   pexelsQuery: 'nature',
   pexelsData: null,
+  hasSeenTutorial: false,
 };
 
 export const DEFAULT_NOTES = '';

@@ -1,8 +1,7 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import {
   DndContext,
   closestCenter,
-  rectIntersection,
   KeyboardSensor,
   PointerSensor,
   useSensor,
@@ -37,9 +36,13 @@ export default function BookmarkGrid({ searchQuery }) {
   const [activeId, setActiveId] = useState(null);
   const [activeType, setActiveType] = useState(null); // 'Section' | 'Bookmark' | null
 
+  // Refs to avoid stale closures in collision detection and throttle dragOver
+  const activeTypeRef = useRef(null);
+  const lastOverId = useRef(null);
+
   // DnD sensors
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(PointerSensor, { activationConstraint: { distance: 10 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
@@ -114,12 +117,29 @@ export default function BookmarkGrid({ searchQuery }) {
     setSectionFormOpen(false);
   };
 
-  // DnD handlers
+  // ─── Custom collision detection ───
+  // When dragging a SECTION, only consider other section containers as drop targets.
+  // This prevents the collision algorithm from matching bookmarks inside sections,
+  // which was causing section drags to silently fail for pre-existing Chrome folders.
+  const collisionDetection = useCallback((args) => {
+    if (activeTypeRef.current === 'Section') {
+      const sectionIds = new Set(state.sections.map(s => s.id));
+      const filteredContainers = args.droppableContainers.filter(
+        container => sectionIds.has(container.id)
+      );
+      return closestCenter({ ...args, droppableContainers: filteredContainers });
+    }
+    return closestCenter(args);
+  }, [state.sections]);
+
+  // ─── DnD handlers ───
   const handleDragStart = (event) => {
     try {
       const type = event.active.data.current?.type ?? null;
       setActiveId(event.active.id);
       setActiveType(type);
+      activeTypeRef.current = type;
+      lastOverId.current = null;
     } catch (err) {
       console.error('DragStart error:', err);
     }
@@ -127,7 +147,7 @@ export default function BookmarkGrid({ searchQuery }) {
 
   const handleDragOver = (event) => {
     // Never mutate state while dragging a section — sections are reordered only in onDragEnd
-    if (activeType === 'Section') return;
+    if (activeTypeRef.current === 'Section') return;
 
     try {
       const { active, over } = event;
@@ -137,6 +157,10 @@ export default function BookmarkGrid({ searchQuery }) {
       const overId = over.id;
 
       if (draggedId === overId) return;
+
+      // Throttle: skip if we already processed this exact overId to prevent rapid re-renders
+      if (overId === lastOverId.current) return;
+      lastOverId.current = overId;
 
       const activeBookmark = state.bookmarks.find((b) => b.id === draggedId);
       if (!activeBookmark) return;
@@ -188,15 +212,29 @@ export default function BookmarkGrid({ searchQuery }) {
   const handleDragEnd = (event) => {
     try {
       const { active, over } = event;
+      const wasActiveType = activeTypeRef.current;
+
+      // Reset drag state
       setActiveId(null);
       setActiveType(null);
+      activeTypeRef.current = null;
+      lastOverId.current = null;
 
       if (!over || active.id === over.id) return;
 
-      if (activeType === 'Section') {
+      if (wasActiveType === 'Section') {
         const sortedSections = [...state.sections].sort((a, b) => a.order - b.order);
         const oldIndex = sortedSections.findIndex((s) => s.id === active.id);
-        const newIndex = sortedSections.findIndex((s) => s.id === over.id);
+        let newIndex = sortedSections.findIndex((s) => s.id === over.id);
+
+        // Fallback: if over.id matched a bookmark instead of a section,
+        // resolve to the section that bookmark belongs to
+        if (newIndex === -1) {
+          const overBookmark = state.bookmarks.find(b => b.id === over.id);
+          if (overBookmark) {
+            newIndex = sortedSections.findIndex(s => s.id === overBookmark.sectionId);
+          }
+        }
 
         if (oldIndex !== -1 && newIndex !== -1 && oldIndex !== newIndex) {
           reorderSections(arrayMove(sortedSections, oldIndex, newIndex));
@@ -207,14 +245,16 @@ export default function BookmarkGrid({ searchQuery }) {
     }
   };
 
-  // Pick the right collision algorithm depending on what is being dragged.
-  // Sections use rectIntersection (more stable for large cards in a grid).
-  // Bookmarks use closestCenter (precise for small list items).
-  const collisionDetection = activeType === 'Section' ? rectIntersection : closestCenter;
+  const handleDragCancel = () => {
+    setActiveId(null);
+    setActiveType(null);
+    activeTypeRef.current = null;
+    lastOverId.current = null;
+  };
 
   // Find the active item for the overlay
   const activeSection = state.sections.find(s => s.id === activeId);
-  const activeBookmark = state.bookmarks.find(b => b.id === activeId);
+  const activeBookmarkItem = state.bookmarks.find(b => b.id === activeId);
 
   // Sort sections by order
   const sortedSectionsList = [...state.sections].sort((a, b) => a.order - b.order);
@@ -233,6 +273,7 @@ export default function BookmarkGrid({ searchQuery }) {
           onDragStart={handleDragStart}
           onDragOver={handleDragOver}
           onDragEnd={handleDragEnd}
+          onDragCancel={handleDragCancel}
         >
           {/* Bookmark Sections Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
@@ -255,9 +296,14 @@ export default function BookmarkGrid({ searchQuery }) {
             {!searchQuery && (
               <button
                 onClick={handleAddSection}
-                className="stagger-item min-h-[120px] rounded-2xl border-2 border-dashed border-white/10 hover:border-brand-600/30 flex flex-col items-center justify-center gap-2 text-gray-500 hover:text-brand-400 transition-all duration-300 hover:bg-white/[0.02] group"
+                className="stagger-item min-h-[120px] rounded-2xl border-2 border-dashed flex flex-col items-center justify-center gap-2 transition-all duration-300 group hover:scale-[1.02]"
+                style={{
+                  borderColor: 'var(--text-muted)',
+                  color: 'var(--text-secondary)',
+                  background: 'var(--input-bg)'
+                }}
               >
-                <Plus size={24} className="group-hover:scale-110 transition-transform" />
+                <Plus size={24} className="group-hover:scale-110 transition-transform" style={{ color: 'var(--accent-color)' }} />
                 <span className="text-sm font-medium">Add Section</span>
               </button>
             )}
@@ -276,10 +322,10 @@ export default function BookmarkGrid({ searchQuery }) {
                     onDeleteSection={() => {}}
                   />
                 </div>
-              ) : activeBookmark ? (
+              ) : activeBookmarkItem ? (
                 <div className="w-[250px] opacity-80 rotate-2 scale-105 pointer-events-none">
                   <BookmarkCard
-                    bookmark={activeBookmark}
+                    bookmark={activeBookmarkItem}
                     onEdit={() => {}}
                     onDelete={() => {}}
                   />
