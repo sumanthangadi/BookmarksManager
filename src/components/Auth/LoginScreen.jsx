@@ -35,7 +35,8 @@ export default function LoginScreen({ onLoginSuccess }) {
       setStatus('Opening sign-in page...');
       // Open the web app login in a new tab
       const domain = import.meta.env.DEV ? 'http://localhost:5173' : 'https://www.getfolio.tech';
-      const webLoginUrl = `${domain}/login?source=extension`;
+      const extId = typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id ? chrome.runtime.id : '';
+      const webLoginUrl = `${domain}/login?source=extension${extId ? `&extId=${extId}` : ''}`;
       window.open(webLoginUrl, '_blank');
       setStatus('Waiting for you to sign in...');
       startPolling();

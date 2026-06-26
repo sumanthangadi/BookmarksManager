@@ -81,7 +81,7 @@ const FOLDER_ICON_MAP = {
 /**
  * Get the best icon for a folder name.
  */
-function getIconForFolder(folderName) {
+export function getIconForFolder(folderName) {
   const lower = folderName.toLowerCase().trim();
   
   // Exact match first
@@ -136,6 +136,7 @@ export const importBrowserBookmarks = () => {
               name: node.title,
               icon: getIconForFolder(node.title),
               order: sectionOrder++,
+              browserFolderId: node.id,
             });
           }
 
@@ -174,6 +175,7 @@ export const importBrowserBookmarks = () => {
             title: node.title || 'Untitled',
             url: node.url,
             sectionId: parentSectionId,
+            browserBookmarkId: node.id,
           });
         }
       };

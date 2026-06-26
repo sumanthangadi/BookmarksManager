@@ -27,6 +27,8 @@ export default function BookmarkGrid({ searchQuery }) {
     reorderSections,
     addSection,
     deleteSection,
+    commitBookmarkMove,
+    commitSectionMove,
   } = useApp();
 
   const [formOpen, setFormOpen] = useState(false);
@@ -213,20 +215,20 @@ export default function BookmarkGrid({ searchQuery }) {
     try {
       const { active, over } = event;
       const wasActiveType = activeTypeRef.current;
-
+ 
       // Reset drag state
       setActiveId(null);
       setActiveType(null);
       activeTypeRef.current = null;
       lastOverId.current = null;
-
+ 
       if (!over || active.id === over.id) return;
-
+ 
       if (wasActiveType === 'Section') {
         const sortedSections = [...state.sections].sort((a, b) => a.order - b.order);
         const oldIndex = sortedSections.findIndex((s) => s.id === active.id);
         let newIndex = sortedSections.findIndex((s) => s.id === over.id);
-
+ 
         // Fallback: if over.id matched a bookmark instead of a section,
         // resolve to the section that bookmark belongs to
         if (newIndex === -1) {
@@ -235,9 +237,19 @@ export default function BookmarkGrid({ searchQuery }) {
             newIndex = sortedSections.findIndex(s => s.id === overBookmark.sectionId);
           }
         }
-
+ 
         if (oldIndex !== -1 && newIndex !== -1 && oldIndex !== newIndex) {
           reorderSections(arrayMove(sortedSections, oldIndex, newIndex));
+          commitSectionMove(active.id, newIndex);
+        }
+      } else if (wasActiveType === 'Bookmark') {
+        const activeBookmark = state.bookmarks.find((b) => b.id === active.id);
+        if (activeBookmark) {
+          const sectionBookmarks = state.bookmarks.filter((b) => b.sectionId === activeBookmark.sectionId);
+          const targetIndex = sectionBookmarks.findIndex((b) => b.id === active.id);
+          if (targetIndex !== -1) {
+            commitBookmarkMove(active.id, activeBookmark.sectionId, targetIndex);
+          }
         }
       }
     } catch (err) {

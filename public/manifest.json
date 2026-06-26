@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Folio",
+  "name": "Folio - Visual Bookmark Manager & New Tab",
   "version": "1.0.0",
-  "description": "A premium customizable new tab dashboard with organized bookmarks, quick notes, and beautiful wallpapers.",
+  "description": "Visual bookmark manager and customizable new tab dashboard. Organize bookmarks beautifully with folders, notes, and wallpapers.",
   "background": {
     "service_worker": "background.js"
   },

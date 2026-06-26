@@ -170,42 +170,77 @@ export default function App() {
   useEffect(() => {
     async function initApp() {
       try {
+        // ── Step 1: Restore from persistent local cache immediately ──
         if (typeof chrome !== 'undefined' && chrome.storage) {
-          const stored = await chrome.storage.local.get(['appwrite_jwt', 'cached_user', 'cached_trial']);
+          const stored = await chrome.storage.local.get([
+            'appwrite_jwt', 'folio_auth'
+          ]);
 
-          // Apply JWT to Appwrite client
+          // Apply JWT to Appwrite client (may be expired, that's OK)
           if (stored.appwrite_jwt) {
             setClientJWT(stored.appwrite_jwt);
           }
 
-          // Show cached user instantly — no spinner
-          if (stored.cached_user) {
-            setUser(stored.cached_user);
-            setTrialStatus(stored.cached_trial || null);
+          // If we have a persistent auth record, show the user instantly
+          if (stored.folio_auth && stored.folio_auth.user) {
+            setUser(stored.folio_auth.user);
+            setTrialStatus(stored.folio_auth.trialStatus || null);
             setLoading(false); // hide spinner immediately
           }
         }
 
-        // Verify session with Appwrite in the background (silent)
+        // ── Step 2: Try to verify session with Appwrite (silent) ──
         const currentUser = await AuthService.getCurrentUser();
         if (currentUser) {
+          // Session is valid — update cache with fresh data
           setUser(currentUser);
-          // Cache for next open
           const status = await PricingService.getUserStatus(currentUser.$id);
           setTrialStatus(status);
+          // Persist the auth record for next startup
           if (typeof chrome !== 'undefined' && chrome.storage) {
-            chrome.storage.local.set({ cached_user: currentUser, cached_trial: status });
+            chrome.storage.local.set({
+              folio_auth: { user: currentUser, trialStatus: status }
+            });
           }
         } else {
-          // JWT expired or session gone — clear cache and show login
+          // JWT/session expired. Check if we have a persisted paid user.
           if (typeof chrome !== 'undefined' && chrome.storage) {
-            chrome.storage.local.remove(['appwrite_jwt', 'cached_user', 'cached_trial']);
+            const stored = await chrome.storage.local.get('folio_auth');
+            const auth = stored.folio_auth;
+
+            if (auth && auth.user && auth.trialStatus && auth.trialStatus.paid) {
+              // PAID USER — trust the local cache. Never log them out.
+              console.log('[Folio] JWT expired but user is paid — staying logged in');
+              setUser(auth.user);
+              setTrialStatus(auth.trialStatus);
+            } else if (auth && auth.user && auth.trialStatus && auth.trialStatus.trialActive) {
+              // TRIAL USER with active trial — also trust local cache
+              console.log('[Folio] JWT expired but trial is active — staying logged in');
+              setUser(auth.user);
+              setTrialStatus(auth.trialStatus);
+            } else {
+              // No valid persisted auth, or trial expired and not paid → show login
+              chrome.storage.local.remove(['appwrite_jwt', 'folio_auth']);
+              setUser(null);
+              setTrialStatus(null);
+            }
+          } else {
+            setUser(null);
+            setTrialStatus(null);
           }
-          setUser(null);
-          setTrialStatus(null);
         }
       } catch (e) {
         console.error('App init failed', e);
+        // On error, still try to use persisted auth so we don't log out
+        if (typeof chrome !== 'undefined' && chrome.storage) {
+          try {
+            const stored = await chrome.storage.local.get('folio_auth');
+            if (stored.folio_auth && stored.folio_auth.user) {
+              setUser(stored.folio_auth.user);
+              setTrialStatus(stored.folio_auth.trialStatus || null);
+            }
+          } catch (_) {}
+        }
       } finally {
         setLoading(false);
       }
@@ -257,8 +292,15 @@ export default function App() {
   }, []);
 
   const handleLogout = async () => {
-    await AuthService.logout();
+    // Explicit logout — clear everything
+    try {
+      await AuthService.logout();
+    } catch (_) {}
+    if (typeof chrome !== 'undefined' && chrome.storage) {
+      chrome.storage.local.remove(['appwrite_jwt', 'folio_auth']);
+    }
     setUser(null);
+    setTrialStatus(null);
   };
 
   const handleLoginSuccess = async (newUser) => {
@@ -266,6 +308,12 @@ export default function App() {
     setLoading(true);
     const status = await PricingService.getUserStatus(newUser.$id);
     setTrialStatus(status);
+    // Persist auth so user survives restarts
+    if (typeof chrome !== 'undefined' && chrome.storage) {
+      chrome.storage.local.set({
+        folio_auth: { user: newUser, trialStatus: status }
+      });
+    }
     setLoading(false);
   };
 
@@ -287,7 +335,7 @@ export default function App() {
 
   // Main Dashboard
   return (
-    <AppProvider>
+    <AppProvider user={user}>
       <Dashboard trialStatus={trialStatus} onLogout={handleLogout} />
     </AppProvider>
   );

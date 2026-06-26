@@ -3,6 +3,7 @@ import { useApp } from '../../context/AppContext';
 import { Check, Bookmark, Plus, ExternalLink, ChevronDown, FolderPlus, X } from 'lucide-react';
 import * as Icons from 'lucide-react';
 import Button from '../UI/Button';
+import { isBookmarksApiAvailable } from '../../utils/bookmarkImporter';
 
 export default function BookmarkPopup() {
   const { state, addBookmark, addSection, saveStateNow, isLoaded } = useApp();
@@ -64,37 +65,32 @@ export default function BookmarkPopup() {
     let updatedSections = state.sections;
 
     if (isCreatingSection && newSectionName.trim()) {
-      targetSectionId = `sec_${Date.now()}`;
-      const newSec = {
-        id: targetSectionId,
+      const newSec = await addSection({
         name: newSectionName.trim(),
         icon: 'Folder'
-      };
+      });
+      targetSectionId = newSec.id;
       
-      addSection(newSec);
-      
-      // We manually construct the updated sections array for saveStateNow
       const fullNewSec = { ...newSec, order: state.sections.length };
       updatedSections = [...state.sections, fullNewSec];
     } else if (!targetSectionId) {
       return; // No section selected
     }
 
-    const newBookmark = {
-      id: `bm_${Date.now()}`,
+    const newBookmark = await addBookmark({
       title,
       url,
       sectionId: targetSectionId,
-    };
-
-    addBookmark(newBookmark);
-
-    const updatedBookmarks = [...state.bookmarks, newBookmark];
-    await saveStateNow({
-      ...state,
-      sections: updatedSections,
-      bookmarks: updatedBookmarks
     });
+
+    if (!isBookmarksApiAvailable()) {
+      const updatedBookmarks = [...state.bookmarks, { ...newBookmark, id: newBookmark.id || `bm_${Date.now()}` }];
+      await saveStateNow({
+        ...state,
+        sections: updatedSections,
+        bookmarks: updatedBookmarks
+      });
+    }
 
     setIsSaved(true);
     setTimeout(() => {

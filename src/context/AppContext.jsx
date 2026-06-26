@@ -1,8 +1,9 @@
 import React, { createContext, useContext, useReducer, useEffect, useRef, useCallback } from 'react';
 import { getStorageData, setStorageData } from '../utils/storage';
-import { getDefaultState } from '../utils/defaults';
+import { getDefaultState, DEFAULT_SECTIONS, DEFAULT_BOOKMARKS } from '../utils/defaults';
 import { generateId } from '../utils/constants';
-import { importBrowserBookmarks, isBookmarksApiAvailable } from '../utils/bookmarkImporter';
+import { getIconForFolder, isBookmarksApiAvailable } from '../utils/bookmarkImporter';
+import { SyncService } from '../services/sync';
 
 const AppContext = createContext(null);
 
@@ -122,58 +123,176 @@ function appReducer(state, action) {
   }
 }
 
-export function AppProvider({ children }) {
+export function AppProvider({ children, user }) {
   const [state, dispatch] = useReducer(appReducer, getDefaultState());
   const [isLoaded, setIsLoaded] = React.useState(false);
+  const [isCloudSyncing, setIsCloudSyncing] = React.useState(false);
   const initialized = useRef(false);
   const saveTimeout = useRef(null);
+  const cloudSaveTimeout = useRef(null);
+  const isRestoringRef = useRef(false);
  
+  // Load state from storage on mount, auto-import Chrome bookmarks on first run
+  const syncFromChromeTree = useCallback(async () => {
+    if (!isBookmarksApiAvailable()) return;
+    try {
+      const tree = await new Promise((resolve) => chrome.bookmarks.getTree(resolve));
+      const stored = await getStorageData(['sectionIcons']);
+      const sectionIcons = stored.sectionIcons || {};
+      
+      const sections = [];
+      const bookmarks = [];
+      let sectionOrder = 0;
+
+      const traverse = (node, parentSectionId = null, depth = 0) => {
+        if (!node.url && node.children) {
+          let currentSectionId = parentSectionId;
+          const hasDirectBookmarks = node.children.some(child => child.url);
+          
+          if (node.title) {
+            const hasSubfolders = node.children.some(child => !child.url);
+            const isUserCategory = node.parentId === "1" || node.parentId === "2";
+            
+            if (hasDirectBookmarks || isUserCategory || !hasSubfolders) {
+              currentSectionId = node.id;
+              sections.push({
+                id: currentSectionId,
+                name: node.title,
+                icon: sectionIcons[node.id] || getIconForFolder(node.title),
+                order: sectionOrder++,
+              });
+            }
+          }
+          node.children.forEach(child => traverse(child, currentSectionId, depth + 1));
+        } else if (node.url && parentSectionId) {
+          if (node.url.startsWith('chrome://') || 
+              node.url.startsWith('chrome-extension://') ||
+              node.url.startsWith('javascript:')) {
+            return;
+          }
+          bookmarks.push({
+            id: node.id,
+            title: node.title || 'Untitled',
+            url: node.url,
+            sectionId: parentSectionId,
+          });
+        }
+      };
+
+      if (tree && tree.length > 0) {
+        tree.forEach(rootNode => traverse(rootNode, null, 0));
+      }
+
+      dispatch({
+        type: ACTIONS.SET_STATE,
+        payload: { sections, bookmarks }
+      });
+    } catch (err) {
+      console.error('Error syncing from Chrome bookmark tree:', err);
+    }
+  }, []);
+
   // Load state from storage on mount, auto-import Chrome bookmarks on first run
   useEffect(() => {
     const loadState = async () => {
       try {
-        const stored = await getStorageData(['sections', 'bookmarks', 'notes', 'settings', '_initialized']);
- 
-        // If user has previously saved data, restore it
-        if (stored._initialized) {
-          const payload = {};
-          if (stored.sections) payload.sections = stored.sections;
-          if (stored.bookmarks) payload.bookmarks = stored.bookmarks;
-          if (stored.notes !== undefined) payload.notes = stored.notes;
-          if (stored.settings) payload.settings = { ...getDefaultState().settings, ...stored.settings };
- 
-          if (Object.keys(payload).length > 0) {
-            dispatch({ type: ACTIONS.SET_STATE, payload });
-          }
-        } else {
-          // First run — try to auto-import Chrome bookmarks
-          if (isBookmarksApiAvailable()) {
-            try {
-              console.log('[BookMarks Manager] First run — importing your browser bookmarks...');
-              const imported = await importBrowserBookmarks();
- 
-              if (imported.bookmarks.length > 0) {
-                // Replace defaults with real bookmarks
-                dispatch({
-                  type: ACTIONS.SET_STATE,
-                  payload: {
-                    sections: imported.sections,
-                    bookmarks: imported.bookmarks,
-                  },
-                });
-                console.log(
-                  `[BookMarks Manager] Imported ${imported.bookmarks.length} bookmarks in ${imported.sections.length} sections`
-                );
+        const stored = await getStorageData(['sections', 'bookmarks', 'notes', 'settings', '_initialized', 'sectionIcons']);
+        
+        let sections = stored.sections || [];
+        let bookmarks = stored.bookmarks || [];
+        let notes = stored.notes !== undefined ? stored.notes : getDefaultState().notes;
+        let settings = stored.settings ? { ...getDefaultState().settings, ...stored.settings } : getDefaultState().settings;
+
+        if (isBookmarksApiAvailable()) {
+          // Fetch browser bookmark tree
+          const tree = await new Promise((resolve) => chrome.bookmarks.getTree(resolve));
+          
+          const tempSections = [];
+          const tempBookmarks = [];
+          let sectionOrder = 0;
+          const sectionIcons = stored.sectionIcons || {};
+
+          const traverse = (node, parentSectionId = null, depth = 0) => {
+            if (!node.url && node.children) {
+              let currentSectionId = parentSectionId;
+              const hasDirectBookmarks = node.children.some(child => child.url);
+              
+              if (node.title) {
+                const hasSubfolders = node.children.some(child => !child.url);
+                const isUserCategory = node.parentId === "1" || node.parentId === "2";
+                
+                if (hasDirectBookmarks || isUserCategory || !hasSubfolders) {
+                  currentSectionId = node.id;
+                  tempSections.push({
+                    id: currentSectionId,
+                    name: node.title,
+                    icon: sectionIcons[node.id] || getIconForFolder(node.title),
+                    order: sectionOrder++,
+                  });
+                }
               }
-              // If no bookmarks found, keep the defaults
-            } catch (importErr) {
-              console.warn('[BookMarks Manager] Could not auto-import bookmarks:', importErr.message);
-              // Keep the defaults
+              node.children.forEach(child => traverse(child, currentSectionId, depth + 1));
+            } else if (node.url && parentSectionId) {
+              if (node.url.startsWith('chrome://') || 
+                  node.url.startsWith('chrome-extension://') ||
+                  node.url.startsWith('javascript:')) {
+                return;
+              }
+              tempBookmarks.push({
+                id: node.id,
+                title: node.title || 'Untitled',
+                url: node.url,
+                sectionId: parentSectionId,
+              });
+            }
+          };
+
+          if (tree && tree.length > 0) {
+            tree.forEach(rootNode => traverse(rootNode, null, 0));
+          }
+
+          // If the tree is completely empty (no sections), populate defaults into Chrome bookmarks on first run
+          if (tempSections.length === 0 && !stored._initialized) {
+            console.log('[Folio] First run: Populating default categories and bookmarks into Chrome...');
+            for (const sec of DEFAULT_SECTIONS) {
+              const folder = await new Promise((resolve) => {
+                chrome.bookmarks.create({ parentId: "1", title: sec.name }, resolve);
+              });
+              
+              sectionIcons[folder.id] = sec.icon;
+              
+              const defaultBms = DEFAULT_BOOKMARKS.filter(b => b.sectionId === sec.id);
+              for (const bm of defaultBms) {
+                await new Promise((resolve) => {
+                  chrome.bookmarks.create({ parentId: folder.id, title: bm.title, url: bm.url }, resolve);
+                });
+              }
+            }
+            await setStorageData({ sectionIcons, _initialized: true });
+            
+            // Re-read tree after populating defaults
+            const freshTree = await new Promise((resolve) => chrome.bookmarks.getTree(resolve));
+            tempSections.length = 0;
+            tempBookmarks.length = 0;
+            sectionOrder = 0;
+            if (freshTree && freshTree.length > 0) {
+              freshTree.forEach(rootNode => traverse(rootNode, null, 0));
             }
           }
-          // Mark as initialized so we don't re-import on next load
-          await setStorageData({ _initialized: true });
+
+          sections = tempSections;
+          bookmarks = tempBookmarks;
+        } else {
+          // If we are in local development (Vite dev server), use the old behavior
+          if (!stored._initialized) {
+            sections = getDefaultState().sections;
+            bookmarks = getDefaultState().bookmarks;
+            await setStorageData({ _initialized: true });
+          }
         }
+
+        const payload = { sections, bookmarks, notes, settings };
+        dispatch({ type: ACTIONS.SET_STATE, payload });
       } catch (err) {
         console.error('Failed to load state from storage:', err);
       } finally {
@@ -181,9 +300,32 @@ export function AppProvider({ children }) {
         setIsLoaded(true);
       }
     };
- 
+
     loadState();
   }, []);
+
+  // Listen for native bookmark changes to keep the UI in sync
+  useEffect(() => {
+    if (isBookmarksApiAvailable()) {
+      const handleBookmarkChange = () => {
+        if (isRestoringRef.current) return;
+        console.log('[Folio] Chrome bookmark event detected, syncing...');
+        syncFromChromeTree();
+      };
+
+      chrome.bookmarks.onCreated.addListener(handleBookmarkChange);
+      chrome.bookmarks.onRemoved.addListener(handleBookmarkChange);
+      chrome.bookmarks.onChanged.addListener(handleBookmarkChange);
+      chrome.bookmarks.onMoved.addListener(handleBookmarkChange);
+
+      return () => {
+        chrome.bookmarks.onCreated.removeListener(handleBookmarkChange);
+        chrome.bookmarks.onRemoved.removeListener(handleBookmarkChange);
+        chrome.bookmarks.onChanged.removeListener(handleBookmarkChange);
+        chrome.bookmarks.onMoved.removeListener(handleBookmarkChange);
+      };
+    }
+  }, [syncFromChromeTree]);
  
   // Listen for external storage changes (e.g. from popup) to keep state in sync
   useEffect(() => {
@@ -216,43 +358,387 @@ export function AppProvider({ children }) {
     }
  
     saveTimeout.current = setTimeout(() => {
-      setStorageData({
-        sections: state.sections,
-        bookmarks: state.bookmarks,
+      const dataToSave = {
         notes: state.notes,
         settings: state.settings,
-      }).catch((err) => console.error('Failed to save state:', err));
+      };
+      if (!isBookmarksApiAvailable()) {
+        dataToSave.sections = state.sections;
+        dataToSave.bookmarks = state.bookmarks;
+      }
+      setStorageData(dataToSave).catch((err) => console.error('Failed to save state:', err));
     }, 500);
  
     return () => {
       if (saveTimeout.current) clearTimeout(saveTimeout.current);
     };
   }, [state]);
- 
-    // Memoized action creators
-    const saveStateNow = useCallback(async (stateToSave) => {
-      if (!initialized.current) return;
-      try {
-        await setStorageData({
-          sections: stateToSave.sections,
-          bookmarks: stateToSave.bookmarks,
-          notes: stateToSave.notes,
-          settings: stateToSave.settings,
+
+  // Helper to recreate Chrome bookmarks bar tree from cloud data
+  const restoreBookmarksFromCloud = useCallback(async (cloudSections, cloudBookmarks, cloudIcons) => {
+    if (!isBookmarksApiAvailable()) return;
+    
+    isRestoringRef.current = true;
+    try {
+      // 1. Remove all existing bookmarks & folders in Bookmarks Bar ("1") and Other Bookmarks ("2")
+      const removeChildren = async (parentId) => {
+        const children = await new Promise(resolve => chrome.bookmarks.getChildren(parentId, resolve));
+        if (children) {
+          for (const child of children) {
+            if (child.url) {
+              await new Promise(resolve => chrome.bookmarks.remove(child.id, resolve));
+            } else {
+              await new Promise(resolve => chrome.bookmarks.removeTree(child.id, resolve));
+            }
+          }
+        }
+      };
+      await removeChildren("1");
+      await removeChildren("2");
+
+      // 2. Recreate folders and map old IDs to new Chrome IDs
+      const idMap = {};
+      const newSections = [];
+      const newBookmarks = [];
+      
+      const sortedSections = [...cloudSections].sort((a, b) => a.order - b.order);
+      
+      for (const sec of sortedSections) {
+        const folder = await new Promise(resolve => {
+          chrome.bookmarks.create({ parentId: "1", title: sec.name }, resolve);
         });
-      } catch (err) {
-        console.error('Failed to save state immediately:', err);
+        idMap[sec.id] = folder.id;
+        newSections.push({
+          ...sec,
+          id: folder.id
+        });
       }
-    }, []);
+
+      // 3. Recreate bookmarks
+      for (const bm of cloudBookmarks) {
+        const newParentId = idMap[bm.sectionId];
+        if (newParentId) {
+          const createdBm = await new Promise(resolve => {
+            chrome.bookmarks.create({ parentId: newParentId, title: bm.title, url: bm.url }, resolve);
+          });
+          newBookmarks.push({
+            ...bm,
+            id: createdBm.id,
+            sectionId: newParentId
+          });
+        }
+      }
+
+      // 4. Update sectionIcons in Chrome local storage
+      const newIcons = {};
+      for (const sec of cloudSections) {
+        const newId = idMap[sec.id];
+        if (newId && cloudIcons && cloudIcons[sec.id]) {
+          newIcons[newId] = cloudIcons[sec.id];
+        }
+      }
+      await setStorageData({ sectionIcons: newIcons });
+
+      // 5. Update React State
+      dispatch({
+        type: ACTIONS.SET_STATE,
+        payload: { sections: newSections, bookmarks: newBookmarks }
+      });
+    } catch (err) {
+      console.error('[Sync] Error restoring bookmarks from cloud:', err);
+    } finally {
+      isRestoringRef.current = false;
+    }
+  }, []);
+
+  // Effect: Run two-way sync on startup or user change
+  useEffect(() => {
+    if (!user || !isLoaded) return;
+
+    const performSync = async () => {
+      setIsCloudSyncing(true);
+      try {
+        const cloudDoc = await SyncService.fetchCloudDashboard(user.$id);
+        
+        const stored = await getStorageData(['lastSyncTime', 'needsCloudSync', 'sectionIcons']);
+        const lastSyncTime = stored.lastSyncTime || null;
+        const needsCloudSync = stored.needsCloudSync || false;
+        const localIcons = stored.sectionIcons || {};
+
+        if (cloudDoc) {
+          const cloudData = JSON.parse(cloudDoc.data);
+          const cloudUpdatedAt = cloudDoc.updatedAt;
+
+          if (!lastSyncTime || new Date(cloudUpdatedAt) > new Date(lastSyncTime)) {
+            console.log('[Sync] Cloud is newer. Restoring cloud state to local browser...');
+            await restoreBookmarksFromCloud(
+              cloudData.sections || [],
+              cloudData.bookmarks || [],
+              cloudData.sectionIcons || {}
+            );
+            await setStorageData({
+              lastSyncTime: cloudUpdatedAt,
+              needsCloudSync: false
+            });
+          } else if (needsCloudSync || new Date(cloudUpdatedAt) < new Date(lastSyncTime)) {
+            console.log('[Sync] Local changes detected. Uploading to cloud...');
+            await SyncService.saveCloudDashboard(user.$id, {
+              sections: state.sections,
+              bookmarks: state.bookmarks,
+              sectionIcons: localIcons
+            });
+            const freshDoc = await SyncService.fetchCloudDashboard(user.$id);
+            if (freshDoc) {
+              await setStorageData({
+                lastSyncTime: freshDoc.updatedAt,
+                needsCloudSync: false
+              });
+            }
+          } else {
+            console.log('[Sync] Cloud and local are in sync.');
+          }
+        } else {
+          console.log('[Sync] No cloud backup found. Creating first backup...');
+          await SyncService.saveCloudDashboard(user.$id, {
+            sections: state.sections,
+            bookmarks: state.bookmarks,
+            sectionIcons: localIcons
+          });
+          const freshDoc = await SyncService.fetchCloudDashboard(user.$id);
+          if (freshDoc) {
+            await setStorageData({
+              lastSyncTime: freshDoc.updatedAt,
+              needsCloudSync: false
+            });
+          }
+        }
+      } catch (err) {
+        console.error('[Sync] Error during cloud sync:', err);
+      } finally {
+        setIsCloudSyncing(false);
+      }
+    };
+
+    performSync();
+
+    const handleOnline = () => {
+      console.log('[Sync] Connection restored. Re-syncing with cloud...');
+      performSync();
+    };
+    window.addEventListener('online', handleOnline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+    };
+  }, [user, isLoaded, restoreBookmarksFromCloud]);
+
+  // Effect: Debounced cloud save when state changes
+  useEffect(() => {
+    if (!initialized.current || !user) return;
+    if (isRestoringRef.current) return;
+
+    if (cloudSaveTimeout.current) {
+      clearTimeout(cloudSaveTimeout.current);
+    }
+
+    cloudSaveTimeout.current = setTimeout(async () => {
+      try {
+        const stored = await getStorageData(['sectionIcons']);
+        const localIcons = stored.sectionIcons || {};
+
+        console.log('[Sync] Uploading changes to cloud...');
+        await SyncService.saveCloudDashboard(user.$id, {
+          sections: state.sections,
+          bookmarks: state.bookmarks,
+          sectionIcons: localIcons
+        });
+
+        const freshDoc = await SyncService.fetchCloudDashboard(user.$id);
+        if (freshDoc) {
+          await setStorageData({
+            lastSyncTime: freshDoc.updatedAt,
+            needsCloudSync: false
+          });
+        }
+      } catch (err) {
+        console.warn('[Sync] Offline or failed to save to cloud. Flagging for future sync.');
+        await setStorageData({ needsCloudSync: true });
+      }
+    }, 2000);
+
+    return () => {
+      if (cloudSaveTimeout.current) clearTimeout(cloudSaveTimeout.current);
+    };
+  }, [state.sections, state.bookmarks, user]);
+ 
+  // Memoized action creators
+  const saveStateNow = useCallback(async (stateToSave) => {
+    if (!initialized.current) return;
+    try {
+      const dataToSave = {
+        notes: stateToSave.notes,
+        settings: stateToSave.settings,
+      };
+      if (!isBookmarksApiAvailable()) {
+        dataToSave.sections = stateToSave.sections;
+        dataToSave.bookmarks = stateToSave.bookmarks;
+      }
+      await setStorageData(dataToSave);
+    } catch (err) {
+      console.error('Failed to save state immediately:', err);
+    }
+  }, []);
  
   const actions = {
-    addBookmark: useCallback((bookmark) => dispatch({ type: ACTIONS.ADD_BOOKMARK, payload: bookmark }), []),
-    editBookmark: useCallback((bookmark) => dispatch({ type: ACTIONS.EDIT_BOOKMARK, payload: bookmark }), []),
-    deleteBookmark: useCallback((id) => dispatch({ type: ACTIONS.DELETE_BOOKMARK, payload: id }), []),
+    addBookmark: useCallback((bookmark) => {
+      return new Promise((resolve) => {
+        if (isBookmarksApiAvailable()) {
+          chrome.bookmarks.create({
+            parentId: bookmark.sectionId,
+            title: bookmark.title,
+            url: bookmark.url
+          }, (newBookmark) => {
+            syncFromChromeTree().then(() => {
+              resolve({
+                id: newBookmark.id,
+                title: newBookmark.title,
+                url: newBookmark.url,
+                sectionId: bookmark.sectionId
+              });
+            });
+          });
+        } else {
+          const id = bookmark.id || `bm_${generateId()}`;
+          dispatch({ type: ACTIONS.ADD_BOOKMARK, payload: { ...bookmark, id } });
+          resolve({ ...bookmark, id });
+        }
+      });
+    }, [syncFromChromeTree]),
+
+    editBookmark: useCallback((bookmark) => {
+      return new Promise((resolve) => {
+        if (isBookmarksApiAvailable()) {
+          chrome.bookmarks.update(bookmark.id, { title: bookmark.title, url: bookmark.url }, () => {
+            chrome.bookmarks.get(bookmark.id, (results) => {
+              if (results && results[0] && results[0].parentId !== bookmark.sectionId) {
+                chrome.bookmarks.move(bookmark.id, { parentId: bookmark.sectionId }, () => {
+                  syncFromChromeTree().then(resolve);
+                });
+              } else {
+                syncFromChromeTree().then(resolve);
+              }
+            });
+          });
+        } else {
+          dispatch({ type: ACTIONS.EDIT_BOOKMARK, payload: bookmark });
+          resolve();
+        }
+      });
+    }, [syncFromChromeTree]),
+
+    deleteBookmark: useCallback((id) => {
+      return new Promise((resolve) => {
+        if (isBookmarksApiAvailable()) {
+          chrome.bookmarks.remove(id, () => {
+            syncFromChromeTree().then(resolve);
+          });
+        } else {
+          dispatch({ type: ACTIONS.DELETE_BOOKMARK, payload: id });
+          resolve();
+        }
+      });
+    }, [syncFromChromeTree]),
+
     reorderBookmarks: useCallback((bookmarks) => dispatch({ type: ACTIONS.REORDER_BOOKMARKS, payload: bookmarks }), []),
     reorderSections: useCallback((sections) => dispatch({ type: ACTIONS.REORDER_SECTIONS, payload: sections }), []),
-    addSection: useCallback((section) => dispatch({ type: ACTIONS.ADD_SECTION, payload: section }), []),
-    editSection: useCallback((section) => dispatch({ type: ACTIONS.EDIT_SECTION, payload: section }), []),
-    deleteSection: useCallback((id) => dispatch({ type: ACTIONS.DELETE_SECTION, payload: id }), []),
+
+    commitBookmarkMove: useCallback((bookmarkId, sectionId, targetIndex) => {
+      return new Promise((resolve) => {
+        if (isBookmarksApiAvailable()) {
+          chrome.bookmarks.move(bookmarkId, { parentId: sectionId, index: targetIndex }, () => {
+            syncFromChromeTree().then(resolve);
+          });
+        } else {
+          resolve();
+        }
+      });
+    }, [syncFromChromeTree]),
+
+    commitSectionMove: useCallback((sectionId, targetIndex) => {
+      return new Promise((resolve) => {
+        if (isBookmarksApiAvailable()) {
+          chrome.bookmarks.move(sectionId, { index: targetIndex }, () => {
+            syncFromChromeTree().then(resolve);
+          });
+        } else {
+          resolve();
+        }
+      });
+    }, [syncFromChromeTree]),
+
+    addSection: useCallback((section) => {
+      return new Promise((resolve) => {
+        if (isBookmarksApiAvailable()) {
+          chrome.bookmarks.create({ parentId: "1", title: section.name }, (newFolder) => {
+            chrome.storage.local.get(['sectionIcons'], (stored) => {
+              const sectionIcons = stored.sectionIcons || {};
+              sectionIcons[newFolder.id] = section.icon || 'Folder';
+              chrome.storage.local.set({ sectionIcons }, () => {
+                syncFromChromeTree().then(() => {
+                  resolve({
+                    id: newFolder.id,
+                    name: newFolder.title,
+                    icon: section.icon || 'Folder'
+                  });
+                });
+              });
+            });
+          });
+        } else {
+          const id = section.id || `sec_${generateId()}`;
+          dispatch({ type: ACTIONS.ADD_SECTION, payload: { ...section, id } });
+          resolve({ ...section, id });
+        }
+      });
+    }, [syncFromChromeTree]),
+
+    editSection: useCallback((section) => {
+      return new Promise((resolve) => {
+        if (isBookmarksApiAvailable()) {
+          chrome.bookmarks.update(section.id, { title: section.name }, () => {
+            chrome.storage.local.get(['sectionIcons'], (stored) => {
+              const sectionIcons = stored.sectionIcons || {};
+              sectionIcons[section.id] = section.icon || 'Folder';
+              chrome.storage.local.set({ sectionIcons }, () => {
+                syncFromChromeTree().then(resolve);
+              });
+            });
+          });
+        } else {
+          dispatch({ type: ACTIONS.EDIT_SECTION, payload: section });
+          resolve();
+        }
+      });
+    }, [syncFromChromeTree]),
+
+    deleteSection: useCallback((id) => {
+      return new Promise((resolve) => {
+        if (isBookmarksApiAvailable()) {
+          chrome.bookmarks.removeTree(id, () => {
+            chrome.storage.local.get(['sectionIcons'], (stored) => {
+              const sectionIcons = stored.sectionIcons || {};
+              delete sectionIcons[id];
+              chrome.storage.local.set({ sectionIcons }, () => {
+                syncFromChromeTree().then(resolve);
+              });
+            });
+          });
+        } else {
+          dispatch({ type: ACTIONS.DELETE_SECTION, payload: id });
+          resolve();
+        }
+      });
+    }, [syncFromChromeTree]),
+
     setNotes: useCallback((notes) => dispatch({ type: ACTIONS.SET_NOTES, payload: notes }), []),
     setWallpaper: useCallback((wallpaper) => dispatch({ type: ACTIONS.SET_WALLPAPER, payload: wallpaper }), []),
     updateSettings: useCallback((settings) => dispatch({ type: ACTIONS.UPDATE_SETTINGS, payload: settings }), []),
@@ -262,7 +748,7 @@ export function AppProvider({ children }) {
   };
  
   return (
-    <AppContext.Provider value={{ state, isLoaded, ...actions }}>
+    <AppContext.Provider value={{ state, isLoaded, isCloudSyncing, ...actions }}>
       {children}
     </AppContext.Provider>
   );

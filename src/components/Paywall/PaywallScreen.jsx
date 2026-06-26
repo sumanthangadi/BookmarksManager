@@ -1,27 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import Button from '../UI/Button';
 import GlassCard from '../UI/GlassCard';
 
 export default function PaywallScreen({ user, pricing }) {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
 
-  useEffect(() => {
-    // Load Razorpay script
-    const script = document.createElement('script');
-    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
-    script.async = true;
-    document.body.appendChild(script);
-    return () => {
-      document.body.removeChild(script);
-    };
-  }, []);
-
-  const handlePayment = async () => {
-    // Open the web app payment page
-    const domain = import.meta.env.DEV ? 'http://localhost:5173' : 'https://www.getfolio.tech';
-    const webPayUrl = `${domain}/pay`;
-    window.open(webPayUrl, '_blank');
+  const handlePayment = () => {
+    const domain = import.meta.env.DEV ? 'http://localhost:5173' : 'https://getfolio.tech';
+    const payUrl = `${domain}/pay?email=${encodeURIComponent(user.email)}`;
+    window.open(payUrl, '_blank');
   };
 
   return (
@@ -45,20 +31,17 @@ export default function PaywallScreen({ user, pricing }) {
           <div className="text-md" style={{ color: 'var(--text-primary)' }}>{user.email}</div>
         </div>
         
-        {error && <p className="text-red-500 text-sm mb-4 text-left">{error}</p>}
-        
         <Button 
           variant="primary" 
           className="w-full py-3 mb-4 text-lg font-medium flex items-center justify-center gap-2"
           onClick={handlePayment}
-          disabled={loading}
         >
-          {loading ? (
-            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-          ) : (
-            `Continue to Payment — ₹${pricing.price}`
-          )}
+          Get Folio — ₹{pricing.price}
         </Button>
+
+        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+          You'll be redirected to a secure payment page
+        </p>
       </GlassCard>
     </div>
   );

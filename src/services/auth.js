@@ -27,7 +27,8 @@ export const AuthService = {
     // Open the web app login page in a new tab
     // We pass a source=extension param so the web app knows to notify us on success
     const domain = import.meta.env.DEV ? 'http://localhost:5173' : 'https://www.getfolio.tech';
-    const webLoginUrl = `${domain}/login?source=extension`;
+    const extId = typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id ? chrome.runtime.id : '';
+    const webLoginUrl = `${domain}/login?source=extension${extId ? `&extId=${extId}` : ''}`;
     window.open(webLoginUrl, '_blank');
   },
 
