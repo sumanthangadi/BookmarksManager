@@ -277,8 +277,7 @@ export default function App() {
     // Listen for SET_JWT message from the web login page
     const handleMessage = (request, sender, sendResponse) => {
       if (request.type === 'SET_JWT' && request.jwt) {
-        console.log('[Extension] Received JWT from web app:', request.jwt);
-        console.log('[Extension] Received session from web app:', request.session);
+        console.log('[Extension] Received auth message from web app');
         // Store JWT + session hash in chrome.storage.local
         if (typeof chrome !== 'undefined' && chrome.storage) {
           const toStore = { appwrite_jwt: request.jwt };
