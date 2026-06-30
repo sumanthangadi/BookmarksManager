@@ -224,6 +224,13 @@ export function AppProvider({ children, user }) {
           const hasDirectBookmarks = node.children.some(child => child.url);
           
           if (node.title) {
+            const normTitle = node.title.toLowerCase().trim();
+            if (node.parentId === "1" && (normTitle === 'other bookmarks' || normTitle === 'bookmarks bar')) {
+              console.log(`[Folio] Auto-cleaning duplicate system folder under Bookmarks Bar: ${node.title} (${node.id})`);
+              chrome.bookmarks.removeTree(node.id);
+              return;
+            }
+
             const hasSubfolders = node.children.some(child => !child.url);
             const isUserCategory = node.parentId === "1" || node.parentId === "2";
             
@@ -292,6 +299,13 @@ export function AppProvider({ children, user }) {
               const hasDirectBookmarks = node.children.some(child => child.url);
               
               if (node.title) {
+                const normTitle = node.title.toLowerCase().trim();
+                if (node.parentId === "1" && (normTitle === 'other bookmarks' || normTitle === 'bookmarks bar')) {
+                  console.log(`[Folio] Auto-cleaning duplicate system folder under Bookmarks Bar: ${node.title} (${node.id})`);
+                  chrome.bookmarks.removeTree(node.id);
+                  return;
+                }
+
                 const hasSubfolders = node.children.some(child => !child.url);
                 const isUserCategory = node.parentId === "1" || node.parentId === "2";
                 
@@ -471,13 +485,25 @@ export function AppProvider({ children, user }) {
       await removeChildren("2");
 
       // 2. Recreate folders and map old IDs to new Chrome IDs
-      const idMap = {};
+      const idMap = {
+        "1": "1",
+        "2": "2"
+      };
       const newSections = [];
       const newBookmarks = [];
       
       const sortedSections = [...cloudSections].sort((a, b) => a.order - b.order);
       
       for (const sec of sortedSections) {
+        if (sec.id === "1" || sec.id === "2") {
+          idMap[sec.id] = sec.id;
+          newSections.push({
+            ...sec,
+            id: sec.id
+          });
+          continue;
+        }
+
         const folder = await new Promise(resolve => {
           chrome.bookmarks.create({ parentId: "1", title: sec.name }, resolve);
         });
