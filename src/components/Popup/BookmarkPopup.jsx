@@ -5,6 +5,7 @@ import * as Icons from 'lucide-react';
 import Button from '../UI/Button';
 import { isBookmarksApiAvailable } from '../../utils/bookmarkImporter';
 import { SessionsService } from '../../services/sessions';
+import { AuthService } from '../../services/auth';
 
 export default function BookmarkPopup() {
   const { state, addBookmark, addSection, saveStateNow, isLoaded } = useApp();
@@ -78,15 +79,37 @@ export default function BookmarkPopup() {
     async function initPopupAuth() {
       try {
         if (typeof chrome !== 'undefined' && chrome.storage) {
-          const stored = await chrome.storage.local.get(['appwrite_jwt', 'folio_auth']);
+          const stored = await chrome.storage.local.get(['appwrite_jwt', 'folio_auth', 'appwrite_session']);
           
-          const { refreshAppwriteSession, setClientJWT } = await import('../../lib/appwrite');
+          const { refreshAppwriteSession, setClientJWT, client } = await import('../../lib/appwrite');
+
+          let currentUser = null;
           const hasSession = await refreshAppwriteSession();
-          if (!hasSession && stored.appwrite_jwt) {
-            setClientJWT(stored.appwrite_jwt);
+          
+          if (hasSession) {
+            currentUser = await AuthService.getCurrentUser();
+            if (!currentUser) {
+              // Session expired/invalid! Clear it.
+              delete client.headers['X-Appwrite-Session'];
+              delete client.headers['X-Fallback-Cookies'];
+              await chrome.storage.local.remove('appwrite_session');
+            }
           }
 
-          if (stored.folio_auth && stored.folio_auth.user) {
+          // Fallback to JWT if session failed
+          if (!currentUser && stored.appwrite_jwt) {
+            setClientJWT(stored.appwrite_jwt);
+            currentUser = await AuthService.getCurrentUser();
+            if (!currentUser) {
+              // JWT expired/invalid! Clear it.
+              await chrome.storage.local.remove('appwrite_jwt');
+            }
+          }
+
+          if (currentUser) {
+            setUser(currentUser);
+          } else if (stored.folio_auth && stored.folio_auth.user) {
+            // Offline fallback (read-only for UI representation)
             setUser(stored.folio_auth.user);
           }
         }
