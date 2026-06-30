@@ -47,8 +47,7 @@ export const SessionsService = {
           sessionName,
           tabs: JSON.stringify(tabs),
           createdAt: new Date().toISOString()
-        },
-        [] // No document-level permissions — collection-level perms handle access
+        }
       );
       return doc;
     } catch (e) {
