@@ -18,10 +18,6 @@ export const AuthService = {
       const user = await account.get();
       return user;
     } catch (e) {
-      try {
-        const { logDebug } = await import('../utils/debug');
-        await logDebug(`[AuthService] getCurrentUser failed: ${e.message || e}`);
-      } catch (_) {}
       return null;
     }
   },

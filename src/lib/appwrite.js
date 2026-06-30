@@ -24,8 +24,7 @@ export function setClientJWT(jwt) {
 export function setClientSession(sessionHash) {
   if (sessionHash) {
     client.setSession(sessionHash);
-    client.headers['X-Fallback-Cookies'] = `a_session_${APPWRITE_PROJECT_ID}=${sessionHash}`;
-    console.log('[Appwrite] Session hash applied via client.setSession() and X-Fallback-Cookies');
+    console.log('[Appwrite] Session hash applied via client.setSession()');
     return true;
   }
   return false;
@@ -40,7 +39,6 @@ export async function refreshAppwriteSession() {
       if (stored.appwrite_session) {
         console.log('[Appwrite] Found stored session hash. Applying...');
         client.setSession(stored.appwrite_session);
-        client.headers['X-Fallback-Cookies'] = `a_session_${APPWRITE_PROJECT_ID}=${stored.appwrite_session}`;
         return true;
       }
     } catch (_) {}
@@ -69,6 +67,20 @@ export async function refreshAppwriteSession() {
           partitionKey: {}
         });
 
+        // Sort cookies to prioritize the ones matching our web app top-level site
+        const targetSite = import.meta.env.DEV ? 'http://localhost' : 'https://www.getfolio.tech';
+        list.sort((a, b) => {
+          const aSite = a.partitionKey?.topLevelSite || '';
+          const bSite = b.partitionKey?.topLevelSite || '';
+          
+          const aMatch = aSite.startsWith(targetSite) || (targetSite === 'https://www.getfolio.tech' && aSite.startsWith('https://getfolio.tech'));
+          const bMatch = bSite.startsWith(targetSite) || (targetSite === 'https://www.getfolio.tech' && bSite.startsWith('https://getfolio.tech'));
+          
+          if (aMatch && !bMatch) return -1;
+          if (!aMatch && bMatch) return 1;
+          return 0;
+        });
+
         // If no cookies found, try without partitionKey
         if (list.length === 0) {
           list = await getCookies({
@@ -78,9 +90,9 @@ export async function refreshAppwriteSession() {
 
         const cookie = list[0];
         if (cookie && cookie.value) {
-          console.log('[Appwrite] Found active session cookie. Applying fallback headers...');
-          client.setSession(cookie.value);
+          console.log('[Appwrite] Found active session cookie. Applying fallback headers & session...');
           client.headers['X-Fallback-Cookies'] = `a_session_${APPWRITE_PROJECT_ID}=${cookie.value}`;
+          client.setSession(cookie.value);
           // Persist the cookie value in local storage as a session hash
           try {
             chrome.storage.local.set({ appwrite_session: cookie.value });

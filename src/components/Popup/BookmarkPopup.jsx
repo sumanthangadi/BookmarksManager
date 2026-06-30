@@ -1,39 +1,33 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
-import { Check, Bookmark, Plus, ExternalLink, ChevronDown, FolderPlus, X, Laptop } from 'lucide-react';
+import { Check, Bookmark, Plus, ExternalLink, ChevronDown, FolderPlus, X, History, LogIn, Laptop } from 'lucide-react';
 import * as Icons from 'lucide-react';
 import Button from '../UI/Button';
 import { isBookmarksApiAvailable } from '../../utils/bookmarkImporter';
-import { SessionsService } from '../../services/sessions';
-import { AuthService } from '../../services/auth';
-import { logDebug } from '../../utils/debug';
 
 export default function BookmarkPopup() {
   const { state, addBookmark, addSection, saveStateNow, isLoaded } = useApp();
-  const [activeTab, setActiveTab] = useState('bookmark'); // 'bookmark' or 'session'
-  
-  // Bookmark tab states
   const [title, setTitle] = useState('');
   const [url, setUrl] = useState('');
   const [sectionId, setSectionId] = useState('');
   const [isSaved, setIsSaved] = useState(false);
   const [error, setError] = useState('');
+  
+  // Tabs and auth state
+  const [activeTab, setActiveTab] = useState('bookmark'); // 'bookmark' or 'session'
+  const [user, setUser] = useState(null);
+  const [sessionName, setSessionName] = useState('');
+  const [tabCount, setTabCount] = useState(0);
+  const [isSavingSession, setIsSavingSession] = useState(false);
+  const [sessionSaved, setSessionSaved] = useState(false);
+
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isCreatingSection, setIsCreatingSection] = useState(false);
   const [newSectionName, setNewSectionName] = useState('');
   const dropdownRef = useRef(null);
 
-  // Session tab states
-  const [user, setUser] = useState(null);
-  const [isAuthLoaded, setIsAuthLoaded] = useState(false);
-  const [sessionName, setSessionName] = useState('');
-  const [openTabs, setOpenTabs] = useState([]);
-  const [isSavingSession, setIsSavingSession] = useState(false);
-  const [sessionSaved, setSessionSaved] = useState(false);
-  const [sessionError, setSessionError] = useState('');
-
   useEffect(() => {
-    // 1. Get current tab information for single bookmark tab
+    // 1. Get current tab information for bookmarking
     if (typeof chrome !== 'undefined' && chrome.tabs) {
       chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
         const currentTab = tabs[0];
@@ -48,93 +42,34 @@ export default function BookmarkPopup() {
         }
       });
 
-      // Get all tabs in current window for session saving
+      // 2. Query total open tabs in current window for session saving
       chrome.tabs.query({ currentWindow: true }, (tabs) => {
-        const validTabs = tabs
-          .filter(t => t.url && !t.url.startsWith('chrome://') && !t.url.startsWith('about:'))
-          .map(t => ({
-            title: t.title || 'Untitled',
-            url: t.url,
-            favicon: t.favIconUrl || ''
-          }));
-        setOpenTabs(validTabs);
+        const validTabs = tabs.filter(t => t.url && !t.url.startsWith('chrome://') && !t.url.startsWith('about:'));
+        setTabCount(validTabs.length);
       });
     } else {
       // Fallback for development/preview
       setTitle('Example Page');
       setUrl('https://example.com');
-      setOpenTabs([
-        { title: 'Example Page', url: 'https://example.com', favicon: '' },
-        { title: 'Google', url: 'https://google.com', favicon: '' },
-        { title: 'Appwrite', url: 'https://appwrite.io', favicon: '' }
-      ]);
+      setTabCount(5);
     }
 
-    // 2. Initialize default session name
-    const now = new Date();
-    const dateStr = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
-    setSessionName(`Session - ${dateStr}, ${timeStr}`);
-
-    // 3. Load user & authenticate Appwrite client in popup context
-    async function initPopupAuth() {
+    // 3. Retrieve user profile
+    const fetchUser = async () => {
       try {
-        if (typeof chrome !== 'undefined' && chrome.storage) {
-          const stored = await chrome.storage.local.get(['appwrite_jwt', 'folio_auth', 'appwrite_session']);
-          await logDebug('[Popup Auth] Stored keys:', {
-            hasJwt: !!stored.appwrite_jwt,
-            hasSession: !!stored.appwrite_session,
-            hasUser: !!stored.folio_auth?.user
-          });
-          
-          const { refreshAppwriteSession, setClientJWT, client } = await import('../../lib/appwrite');
-
-          let currentUser = null;
-          const hasSession = await refreshAppwriteSession();
-          await logDebug('[Popup Auth] refreshAppwriteSession returned:', hasSession);
-          
-          if (hasSession) {
-            await logDebug('[Popup Auth] Found active session. Getting current user...');
-            currentUser = await AuthService.getCurrentUser();
-            await logDebug('[Popup Auth] Current user response:', currentUser);
-            if (!currentUser) {
-              await logDebug('[Popup Auth] Session expired/invalid. Clearing session...');
-              delete client.headers['X-Appwrite-Session'];
-              delete client.headers['X-Fallback-Cookies'];
-              await chrome.storage.local.remove('appwrite_session');
-            }
-          }
-
-          // Fallback to JWT if session failed
-          if (!currentUser && stored.appwrite_jwt) {
-            await logDebug('[Popup Auth] Trying JWT fallback...');
-            setClientJWT(stored.appwrite_jwt);
-            currentUser = await AuthService.getCurrentUser();
-            await logDebug('[Popup Auth] JWT user response:', currentUser);
-            if (!currentUser) {
-              await logDebug('[Popup Auth] JWT expired/invalid. Clearing JWT...');
-              await chrome.storage.local.remove('appwrite_jwt');
-            }
-          }
-
-          if (currentUser) {
-            setUser(currentUser);
-            await logDebug('[Popup Auth] Authenticated user:', currentUser.$id);
-          } else if (stored.folio_auth && stored.folio_auth.user) {
-            // Offline fallback
-            setUser(stored.folio_auth.user);
-            await logDebug('[Popup Auth] Offline user fallback:', stored.folio_auth.user.$id);
-          } else {
-            await logDebug('[Popup Auth] No user authenticated.');
-          }
+        const { AuthService } = await import('../../services/auth');
+        const currentUser = await AuthService.getCurrentUser();
+        if (currentUser) {
+          setUser(currentUser);
         }
-      } catch (e) {
-        await logDebug('[Popup Auth] Auth init failed error:', e.message || e);
-      } finally {
-        setIsAuthLoaded(true);
-      }
-    }
-    initPopupAuth();
+      } catch (_) {}
+    };
+    fetchUser();
+
+    // 4. Prefill session name
+    const now = new Date();
+    const timeString = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    setSessionName(`Session - ${timeString}`);
   }, []);
 
   // Update default section when sections load
@@ -196,36 +131,64 @@ export default function BookmarkPopup() {
   };
 
   const handleSaveSession = async () => {
-    await logDebug('[Popup SaveSession] Clicked. User:', user, 'SessionName:', sessionName, 'Tabs count:', openTabs.length);
-    if (!user) {
-      setSessionError('Please sign in to Folio to save sessions.');
-      return;
-    }
+    if (!user) return;
     if (!sessionName.trim()) {
-      setSessionError('Please provide a session name.');
-      return;
-    }
-    if (openTabs.length === 0) {
-      setSessionError('No open tabs found to save.');
+      setError('Please enter a session name.');
       return;
     }
 
     setIsSavingSession(true);
-    setSessionError('');
-
     try {
-      await logDebug('[Popup SaveSession] Calling SessionsService.saveSession with:', { userId: user.$id, name: sessionName.trim() });
-      const result = await SessionsService.saveSession(user.$id, sessionName.trim(), openTabs);
-      await logDebug('[Popup SaveSession] Save result:', result);
-      setSessionSaved(true);
-      setTimeout(() => {
-        window.close();
-      }, 1200);
+      if (typeof chrome !== 'undefined' && chrome.tabs) {
+        chrome.tabs.query({ currentWindow: true }, async (tabs) => {
+          const validTabs = tabs
+            .filter(t => t.url && !t.url.startsWith('chrome://') && !t.url.startsWith('about:'))
+            .map(t => ({
+              title: t.title || 'Untitled',
+              url: t.url,
+              favicon: t.favIconUrl || ''
+            }));
+
+          if (validTabs.length === 0) {
+            setError('No valid web pages to save in this window.');
+            setIsSavingSession(false);
+            return;
+          }
+
+          const { SessionsService } = await import('../../services/sessions');
+          await SessionsService.saveSession(user.$id, sessionName.trim(), validTabs);
+
+          setSessionSaved(true);
+          setTimeout(() => {
+            window.close();
+          }, 1200);
+        });
+      } else {
+        // Dev fallback
+        const mockTabs = [
+          { title: 'Google', url: 'https://google.com', favicon: '' },
+          { title: 'GitHub', url: 'https://github.com', favicon: '' }
+        ];
+        const { SessionsService } = await import('../../services/sessions');
+        await SessionsService.saveSession(user.$id, sessionName.trim(), mockTabs);
+        setSessionSaved(true);
+        setTimeout(() => {
+          window.close();
+        }, 1200);
+      }
     } catch (err) {
-      await logDebug('[Popup SaveSession] Error saving session:', err.message || err);
-      setSessionError(err?.message || 'Failed to save session.');
+      console.error(err);
+      setError(err?.message || 'Failed to save session');
       setIsSavingSession(false);
     }
+  };
+
+  const handleLogin = async () => {
+    try {
+      const { AuthService } = await import('../../services/auth');
+      await AuthService.loginWithGoogle();
+      window.close();
+    } catch (_) {}
   };
 
   const selectedSection = state.sections.find(s => s.id === sectionId) || state.sections[0];
@@ -233,16 +196,16 @@ export default function BookmarkPopup() {
 
   if (!isLoaded) {
     return (
-      <div className="p-8 flex flex-col items-center justify-center space-y-4 bg-[#0a0a0a] text-white min-h-[250px]">
-        <div className="w-8 h-8 border-4 border-brand-600 border-t-transparent rounded-full animate-spin"></div>
+      <div className="p-8 flex flex-col items-center justify-center space-y-4 bg-[#0a0a0a] text-white min-h-[300px]">
+        <div className="w-8 h-8 border-4 border-brand-500 border-t-transparent rounded-full animate-spin"></div>
       </div>
     );
   }
 
   if (isSaved) {
     return (
-      <div className="p-8 flex flex-col items-center justify-center space-y-4 bg-[#0a0a0a] text-white min-h-[250px]">
-        <div className="w-16 h-16 rounded-full bg-green-500/20 flex items-center justify-center text-green-500 animate-bounce">
+      <div className="p-8 flex flex-col items-center justify-center space-y-4 bg-[#0a0a0a] text-white min-h-[300px]">
+        <div className="w-16 h-16 rounded-full bg-brand-500/20 flex items-center justify-center text-brand-400 animate-bounce">
           <Check size={32} />
         </div>
         <h2 className="text-xl font-bold">Bookmark Added!</h2>
@@ -255,13 +218,13 @@ export default function BookmarkPopup() {
 
   if (sessionSaved) {
     return (
-      <div className="p-8 flex flex-col items-center justify-center space-y-4 bg-[#0a0a0a] text-white min-h-[250px]">
-        <div className="w-16 h-16 rounded-full bg-green-500/20 flex items-center justify-center text-green-500 animate-bounce">
+      <div className="p-8 flex flex-col items-center justify-center space-y-4 bg-[#0a0a0a] text-white min-h-[300px]">
+        <div className="w-16 h-16 rounded-full bg-brand-500/20 flex items-center justify-center text-brand-400 animate-bounce">
           <Check size={32} />
         </div>
         <h2 className="text-xl font-bold">Session Saved!</h2>
-        <p className="text-gray-400 text-sm text-center">
-          Saved {openTabs.length} tabs as "{sessionName}"
+        <p className="text-gray-400 text-sm">
+          Saved session "{sessionName}"
         </p>
       </div>
     );
@@ -269,7 +232,7 @@ export default function BookmarkPopup() {
 
   if (error) {
     return (
-      <div className="p-8 flex flex-col items-center justify-center space-y-4 bg-[#0a0a0a] text-white min-h-[250px]">
+      <div className="p-8 flex flex-col items-center justify-center space-y-4 bg-[#0a0a0a] text-white min-h-[300px]">
         <div className="w-16 h-16 rounded-full bg-red-500/20 flex items-center justify-center text-red-500">
           <Bookmark size={32} />
         </div>
@@ -283,38 +246,38 @@ export default function BookmarkPopup() {
   }
 
   return (
-    <div className="p-4 bg-[#0a0a0a] text-white min-h-[340px] flex flex-col">
-      {/* Tab Selector Header */}
-      <div className="flex items-center justify-between border-b border-white/5 pb-3 mb-4">
-        <div className="flex gap-1.5 bg-white/5 p-1 rounded-lg w-full">
-          <button
-            onClick={() => setActiveTab('bookmark')}
-            className={`flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all flex-1 ${
-              activeTab === 'bookmark'
-                ? 'bg-brand-600 text-white shadow-lg'
-                : 'text-gray-400 hover:text-white'
-            }`}
-          >
-            <Bookmark size={14} />
-            Bookmark Page
-          </button>
-          <button
-            onClick={() => setActiveTab('session')}
-            className={`flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all flex-1 ${
-              activeTab === 'session'
-                ? 'bg-brand-600 text-white shadow-lg'
-                : 'text-gray-400 hover:text-white'
-            }`}
-          >
-            <Laptop size={14} />
-            Save Session
-          </button>
-        </div>
+    <div className="p-4 bg-[#0a0a0a] text-white min-h-[330px] w-[320px] flex flex-col">
+      {/* Header Tab Bar */}
+      <div className="flex border-b border-white/10 mb-4">
+        <button
+          type="button"
+          onClick={() => setActiveTab('bookmark')}
+          className={`flex-1 pb-2.5 text-xs font-semibold text-center border-b-2 transition-colors flex items-center justify-center gap-1.5 ${
+            activeTab === 'bookmark'
+              ? 'border-brand-500 text-brand-400'
+              : 'border-transparent text-gray-400 hover:text-white'
+          }`}
+        >
+          <Bookmark size={14} />
+          Add Bookmark
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('session')}
+          className={`flex-1 pb-2.5 text-xs font-semibold text-center border-b-2 transition-colors flex items-center justify-center gap-1.5 ${
+            activeTab === 'session'
+              ? 'border-brand-500 text-brand-400'
+              : 'border-transparent text-gray-400 hover:text-white'
+          }`}
+        >
+          <History size={14} />
+          Save Session
+        </button>
       </div>
 
       {activeTab === 'bookmark' ? (
-        /* Add Bookmark Form */
-        <div className="flex flex-col flex-1">
+        /* BOOKMARK TAB CONTENT */
+        <div className="flex-1 flex flex-col justify-between">
           <div className="space-y-4 flex-1">
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-gray-400 ml-1">Title</label>
@@ -380,7 +343,7 @@ export default function BookmarkPopup() {
                   </button>
 
                   {isDropdownOpen && (
-                    <div className="absolute bottom-full mb-2 left-0 right-0 glass border border-white/10 shadow-2xl max-h-40 overflow-y-auto custom-scrollbar animate-fade-in z-50">
+                    <div className="absolute z-50 bottom-full mb-2 left-0 right-0 glass border border-white/10 shadow-2xl max-h-48 overflow-y-auto custom-scrollbar animate-fade-in">
                       {state.sections.map((section) => {
                         const SectionIcon = Icons[section.icon] || Icons.Folder;
                         return (
@@ -391,13 +354,13 @@ export default function BookmarkPopup() {
                               setSectionId(section.id);
                               setIsDropdownOpen(false);
                             }}
-                            className={`w-full flex items-center gap-3 px-4 py-2 text-sm transition-colors hover:bg-white/5 ${
+                            className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors hover:bg-white/5 ${
                               sectionId === section.id ? 'bg-brand-600/10 text-brand-400' : 'text-gray-300'
                             }`}
                           >
-                            <SectionIcon size={14} />
+                            <SectionIcon size={16} />
                             <span className="truncate">{section.name}</span>
-                            {sectionId === section.id && <Check size={12} className="ml-auto" />}
+                            {sectionId === section.id && <Check size={14} className="ml-auto" />}
                           </button>
                         );
                       })}
@@ -410,9 +373,9 @@ export default function BookmarkPopup() {
                           setIsCreatingSection(true);
                           setIsDropdownOpen(false);
                         }}
-                        className="w-full flex items-center gap-3 px-4 py-2 text-sm transition-colors hover:bg-brand-600/20 text-brand-400"
+                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors hover:bg-brand-600/20 text-brand-400"
                       >
-                        <FolderPlus size={14} />
+                        <FolderPlus size={16} />
                         <span>Create New Section</span>
                       </button>
                     </div>
@@ -422,14 +385,14 @@ export default function BookmarkPopup() {
             </div>
           </div>
 
-          <div className="mt-6 flex gap-2">
-            <Button variant="ghost" onClick={() => window.close()} className="flex-1">
+          <div className="mt-8 flex gap-2">
+            <Button variant="ghost" onClick={() => window.close()} className="flex-1 text-xs py-2">
               Cancel
             </Button>
             <Button 
               variant="primary" 
               onClick={handleSave} 
-              className="flex-1" 
+              className="flex-1 text-xs py-2" 
               icon={Plus}
               disabled={isCreatingSection && !newSectionName.trim()}
             >
@@ -438,81 +401,68 @@ export default function BookmarkPopup() {
           </div>
         </div>
       ) : (
-        /* Save Session Form */
-        <div className="flex flex-col flex-1">
-          <div className="space-y-4 flex-1">
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-gray-400 ml-1">Session Name</label>
-              <input
-                type="text"
-                value={sessionName}
-                onChange={(e) => setSessionName(e.target.value)}
-                className="glass-input w-full py-2 px-3 text-sm"
-                placeholder="Session Name"
-              />
-            </div>
-
-            <div className="p-3 bg-white/5 rounded-xl border border-white/5 space-y-2">
-              <div className="flex items-center justify-between text-xs text-gray-400">
-                <span>Tabs to save</span>
-                <span className="font-semibold text-white">{openTabs.length} tabs</span>
+        /* SESSION TAB CONTENT */
+        <div className="flex-1 flex flex-col justify-between">
+          {!user ? (
+            /* Logged out state */
+            <div className="flex-1 flex flex-col items-center justify-center text-center space-y-4 py-6">
+              <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center text-gray-400">
+                <Laptop size={24} />
               </div>
-              
-              {openTabs.length > 0 && (
-                <div className="max-h-24 overflow-y-auto space-y-1.5 custom-scrollbar pr-1">
-                  {openTabs.slice(0, 5).map((tab, idx) => (
-                    <div key={idx} className="flex items-center gap-2 text-[11px] text-gray-400 truncate">
-                      {tab.favicon ? (
-                        <img 
-                          src={tab.favicon} 
-                          alt="" 
-                          className="w-3.5 h-3.5 object-contain" 
-                          onError={(e) => e.target.style.display = 'none'} 
-                        />
-                      ) : (
-                        <div className="w-3.5 h-3.5 rounded bg-white/10 flex items-center justify-center text-[8px] flex-shrink-0">
-                          {idx + 1}
-                        </div>
-                      )}
-                      <span className="truncate flex-1">{tab.title}</span>
-                    </div>
-                  ))}
-                  {openTabs.length > 5 && (
-                    <div className="text-[10px] text-gray-500 text-center pt-0.5">
-                      and {openTabs.length - 5} more tabs...
-                    </div>
-                  )}
+              <div className="space-y-1">
+                <h3 className="text-sm font-semibold">Sign in Required</h3>
+                <p className="text-xs text-gray-400 max-w-[220px]">
+                  Sign in to your Folio account to sync and save window sessions.
+                </p>
+              </div>
+              <Button 
+                variant="primary" 
+                onClick={handleLogin} 
+                className="w-full text-xs py-2 mt-2 bg-brand-600 hover:bg-brand-500"
+                icon={LogIn}
+              >
+                Log In with Google
+              </Button>
+            </div>
+          ) : (
+            /* Logged in state */
+            <div className="flex-1 flex flex-col justify-between">
+              <div className="space-y-4 flex-1">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-gray-400 ml-1">Session Name</label>
+                  <input
+                    type="text"
+                    value={sessionName}
+                    onChange={(e) => setSessionName(e.target.value)}
+                    className="glass-input w-full py-2 px-3 text-sm"
+                    placeholder="Enter session name"
+                  />
                 </div>
-              )}
+
+                <div className="p-3 rounded-lg bg-white/5 border border-white/10 space-y-1">
+                  <div className="text-[11px] font-semibold text-brand-400 uppercase tracking-wider">Session Scope</div>
+                  <p className="text-xs text-gray-300">
+                    This will save all <strong className="text-white font-bold">{tabCount}</strong> open tabs in this window. You can restore them anytime in a new window from your dashboard.
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-8 flex gap-2">
+                <Button variant="ghost" onClick={() => window.close()} className="flex-1 text-xs py-2">
+                  Cancel
+                </Button>
+                <Button 
+                  variant="primary" 
+                  onClick={handleSaveSession} 
+                  className="flex-1 text-xs py-2" 
+                  icon={isSavingSession ? null : Plus}
+                  disabled={isSavingSession || !sessionName.trim()}
+                >
+                  {isSavingSession ? 'Saving...' : 'Save Session'}
+                </Button>
+              </div>
             </div>
-
-            {sessionError && (
-              <div className="p-2.5 rounded-lg bg-brand-500/10 border border-brand-500/20 text-xs text-brand-400 text-center">
-                {sessionError}
-              </div>
-            )}
-
-            {!user && isAuthLoaded && (
-              <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-400 text-center">
-                Please login on the dashboard to enable saving sessions.
-              </div>
-            )}
-          </div>
-
-          <div className="mt-6 flex gap-2">
-            <Button variant="ghost" onClick={() => window.close()} className="flex-1">
-              Cancel
-            </Button>
-            <Button 
-              variant="primary" 
-              onClick={handleSaveSession} 
-              className="flex-1" 
-              icon={Check}
-              disabled={isSavingSession || !user || openTabs.length === 0}
-            >
-              {isSavingSession ? 'Saving...' : 'Save Session'}
-            </Button>
-          </div>
+          )}
         </div>
       )}
     </div>

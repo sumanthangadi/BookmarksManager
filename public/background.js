@@ -1,25 +1,7 @@
 // Background service worker — receives messages from web app and manages storage
-const logDebug = (msg, extra = null) => {
-  if (typeof chrome !== 'undefined' && chrome.storage) {
-    try {
-      chrome.storage.local.get('folio_debug_logs', (res) => {
-        const logs = res.folio_debug_logs || [];
-        const timestamp = new Date().toLocaleTimeString();
-        logs.push(`${timestamp}: [Background Page] ${msg} ${extra ? JSON.stringify(extra) : ''}`);
-        chrome.storage.local.set({ folio_debug_logs: logs.slice(-150) });
-      });
-    } catch (e) {}
-  }
-};
-
 chrome.runtime.onMessageExternal.addListener((request, sender, sendResponse) => {
   if (request.type === 'SET_JWT' && request.jwt) {
-    logDebug('Received SET_JWT from web app', {
-      hasSession: !!request.session,
-      userId: request.userId,
-      email: request.email
-    });
-
+    // Store the JWT and also seed the persistent auth record
     const userData = {
       $id: request.userId,
       email: request.email,
@@ -28,20 +10,18 @@ chrome.runtime.onMessageExternal.addListener((request, sender, sendResponse) => 
 
     chrome.storage.local.get('folio_auth', (stored) => {
       const existingAuth = stored.folio_auth || {};
-      const payload = {
+      const toSet = {
         appwrite_jwt: request.jwt,
         folio_auth: {
           user: userData,
           trialStatus: existingAuth.trialStatus || null,
         }
       };
-      
       if (request.session) {
-        payload.appwrite_session = request.session;
+        toSet.appwrite_session = request.session;
       }
-
-      chrome.storage.local.set(payload, () => {
-        logDebug('Stored JWT, session hash, and user data to storage');
+      chrome.storage.local.set(toSet, () => {
+        console.log('[Background] JWT + auth record stored');
         sendResponse({ ok: true });
       });
     });

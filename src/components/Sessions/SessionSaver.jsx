@@ -3,9 +3,8 @@ import { Save, ExternalLink, Trash2, Monitor, Clock, Layers } from 'lucide-react
 import { SessionsService } from '../../services/sessions';
 import SaveSessionModal from './SaveSessionModal';
 import Button from '../UI/Button';
-import { logDebug } from '../../utils/debug';
 
-export default function SessionSaver({ userId, isAuthReady }) {
+export default function SessionSaver({ userId }) {
   const [sessions, setSessions] = useState([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -15,19 +14,12 @@ export default function SessionSaver({ userId, isAuthReady }) {
 
   // ── Fetch sessions on mount ──
   const loadSessions = useCallback(async () => {
-    await logDebug(`[SessionSaver UI] loadSessions triggered with userId: ${userId}`);
-    if (!userId) {
-      await logDebug('[SessionSaver UI] loadSessions cancelled: userId is empty/null');
-      setLoadingSessions(false);
-      return;
-    }
+    if (!userId) return;
     setLoadingSessions(true);
     try {
       const docs = await SessionsService.fetchSessions(userId);
-      await logDebug(`[SessionSaver UI] fetchSessions returned ${docs.length} documents`);
       setSessions(docs);
     } catch (e) {
-      await logDebug(`[SessionSaver UI] fetchSessions error: ${e.message || e}`);
       console.error('[SessionSaver] Failed to load sessions:', e);
     } finally {
       setLoadingSessions(false);
@@ -35,12 +27,8 @@ export default function SessionSaver({ userId, isAuthReady }) {
   }, [userId]);
 
   useEffect(() => {
-    if (isAuthReady) {
-      loadSessions();
-    } else {
-      logDebug('[SessionSaver UI] deferring loadSessions because auth is not ready');
-    }
-  }, [loadSessions, isAuthReady]);
+    loadSessions();
+  }, [loadSessions]);
 
   // ── Show toast ──
   const showToast = (message, type = 'success') => {
@@ -294,9 +282,6 @@ export default function SessionSaver({ userId, isAuthReady }) {
         loading={saving}
       />
 
-      {/* Diagnostic Logs Panel */}
-      <DebugLogsPanel />
-
       {/* Toast Notification */}
       {toast && (
         <div
@@ -308,75 +293,6 @@ export default function SessionSaver({ userId, isAuthReady }) {
           }}
         >
           {toast.message}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function DebugLogsPanel() {
-  const [logs, setLogs] = useState([]);
-  const [isOpen, setIsOpen] = useState(false);
-
-  const fetchLogs = useCallback(async () => {
-    if (typeof chrome !== 'undefined' && chrome.storage) {
-      const res = await chrome.storage.local.get('folio_debug_logs');
-      setLogs(res.folio_debug_logs || []);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (isOpen) {
-      fetchLogs();
-      const interval = setInterval(fetchLogs, 2000);
-      return () => clearInterval(interval);
-    }
-  }, [isOpen, fetchLogs]);
-
-  const handleClear = async () => {
-    if (typeof chrome !== 'undefined' && chrome.storage) {
-      await chrome.storage.local.remove('folio_debug_logs');
-      setLogs([]);
-    }
-  };
-
-  return (
-    <div className="mt-6 border border-white/5 rounded-2xl bg-white/[0.02] p-4 relative z-50">
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center justify-between w-full text-xs font-semibold text-gray-400 hover:text-white transition-colors"
-      >
-        <span>🔍 DIAGNOSTIC SYSTEM LOGS (SESSIONS)</span>
-        <span>{isOpen ? 'Hide' : 'Show Logs'}</span>
-      </button>
-
-      {isOpen && (
-        <div className="mt-3 space-y-3 animate-fade-in">
-          <div className="flex gap-2">
-            <button
-              onClick={fetchLogs}
-              className="px-2.5 py-1 text-[10px] font-medium bg-white/5 hover:bg-white/10 rounded-lg text-gray-300 transition-colors"
-            >
-              Refresh
-            </button>
-            <button
-              onClick={handleClear}
-              className="px-2.5 py-1 text-[10px] font-medium bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg transition-colors"
-            >
-              Clear Logs
-            </button>
-          </div>
-          <div className="bg-[#050505] border border-white/5 rounded-xl p-3 max-h-48 overflow-y-auto text-[11px] font-mono text-gray-400 space-y-1.5 custom-scrollbar">
-            {logs.length === 0 ? (
-              <div className="text-gray-500 text-center py-2">No diagnostic logs recorded yet. Open the extension popup to generate logs.</div>
-            ) : (
-              logs.map((log, idx) => (
-                <div key={idx} className="whitespace-pre-wrap break-all border-b border-white/[0.02] pb-1.5 last:border-0 last:pb-0">
-                  {log}
-                </div>
-              ))
-            )}
-          </div>
         </div>
       )}
     </div>
