@@ -57,8 +57,21 @@ export default function BookmarkPopup() {
     // 3. Retrieve user profile
     const fetchUser = async () => {
       try {
+        const { refreshAppwriteSession, setClientJWT } = await import('../../lib/appwrite');
+        await refreshAppwriteSession();
+
         const { AuthService } = await import('../../services/auth');
-        const currentUser = await AuthService.getCurrentUser();
+        let currentUser = await AuthService.getCurrentUser();
+
+        // Fallback to JWT if session authentication failed
+        if (!currentUser && typeof chrome !== 'undefined' && chrome.storage) {
+          const stored = await chrome.storage.local.get('appwrite_jwt');
+          if (stored.appwrite_jwt) {
+            setClientJWT(stored.appwrite_jwt);
+            currentUser = await AuthService.getCurrentUser();
+          }
+        }
+
         if (currentUser) {
           setUser(currentUser);
         }
