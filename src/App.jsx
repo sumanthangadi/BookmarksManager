@@ -12,6 +12,7 @@ import { PricingService } from './services/pricing';
 import { useTheme } from './context/ThemeContext';
 import { setClientJWT, setClientSession, refreshAppwriteSession } from './lib/appwrite';
 import { THEMES } from './styles/themes';
+import { logDebug } from './utils/debug';
 
 function Dashboard({ trialStatus, onLogout, userId }) {
   const { state, updateSettings, isLoaded } = useApp();
@@ -178,6 +179,12 @@ export default function App() {
             'appwrite_jwt', 'folio_auth', 'appwrite_session'
           ]);
 
+          await logDebug('[NewTab initApp] Loaded storage keys:', {
+            hasJwt: !!stored.appwrite_jwt,
+            hasSession: !!stored.appwrite_session,
+            hasAuth: !!stored.folio_auth
+          });
+
           // If we have a persistent auth record, show the user instantly in the UI
           if (stored.folio_auth && stored.folio_auth.user) {
             setUser(stored.folio_auth.user);
@@ -189,14 +196,15 @@ export default function App() {
         // Try to authenticate using the session/cookie first
         let currentUser = null;
 
-        console.log('[Auth] Restoring session...');
+        await logDebug('[NewTab initApp] Restoring session via cookies/storage...');
         const hasSession = await refreshAppwriteSession();
         if (hasSession) {
+          await logDebug('[NewTab initApp] Found active session, calling getCurrentUser...');
           currentUser = await AuthService.getCurrentUser();
           if (currentUser) {
-            console.log('[Auth] Authenticated successfully via session/cookie.');
+            await logDebug('[NewTab initApp] Authenticated successfully via session/cookie.');
           } else {
-            console.warn('[Auth] Session/cookie was found but returned 401. Clearing invalid session.');
+            await logDebug('[NewTab initApp] Session/cookie was found but returned 401/error. Clearing session...');
             // Clear invalid session hash from client and storage
             const { client } = await import('./lib/appwrite');
             delete client.headers['X-Appwrite-Session'];
@@ -209,13 +217,13 @@ export default function App() {
 
         // Fallback to JWT if session authentication failed
         if (!currentUser && stored.appwrite_jwt) {
-          console.log('[Auth] Session failed or not found. Trying JWT fallback...');
+          await logDebug('[NewTab initApp] Trying JWT fallback...');
           setClientJWT(stored.appwrite_jwt);
           currentUser = await AuthService.getCurrentUser();
           if (currentUser) {
-            console.log('[Auth] Authenticated successfully via JWT.');
+            await logDebug('[NewTab initApp] Authenticated successfully via JWT.');
           } else {
-            console.warn('[Auth] JWT was found but returned 401. Clearing invalid JWT.');
+            await logDebug('[NewTab initApp] JWT fallback failed. Clearing JWT...');
             if (typeof chrome !== 'undefined' && chrome.storage) {
               chrome.storage.local.remove('appwrite_jwt');
             }
@@ -235,14 +243,16 @@ export default function App() {
             });
           }
         } else {
+          await logDebug('[NewTab initApp] All auth methods failed. Checking offline fallback...');
           // Both session and JWT failed. Check if we have a persisted paid/active trial user to stay logged in offline.
           if (stored.folio_auth) {
             const auth = stored.folio_auth;
             if (auth.user && auth.trialStatus && (auth.trialStatus.paid || auth.trialStatus.trialActive)) {
-              console.log('[Folio] Credentials expired but user has active subscription/trial — staying logged in (offline mode)');
+              await logDebug('[NewTab initApp] Offline mode fallback active (paid/active trial).');
               setUser(auth.user);
               setTrialStatus(auth.trialStatus);
             } else {
+              await logDebug('[NewTab initApp] No valid trial/subscription, clearing auth storage.');
               // No valid trial/subscription, log out
               if (typeof chrome !== 'undefined' && chrome.storage) {
                 chrome.storage.local.remove(['appwrite_jwt', 'appwrite_session', 'folio_auth']);
