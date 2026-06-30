@@ -346,6 +346,7 @@ export default function App() {
     }
     setUser(null);
     setTrialStatus(null);
+    setIsAuthReady(false);
   };
 
   const handleLoginSuccess = async (newUser) => {
@@ -359,6 +360,7 @@ export default function App() {
         folio_auth: { user: newUser, trialStatus: status }
       });
     }
+    setIsAuthReady(true);
     setLoading(false);
   };
 
