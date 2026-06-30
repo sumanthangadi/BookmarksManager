@@ -44,22 +44,51 @@ export async function refreshAppwriteSession() {
     } catch (_) {}
   }
 
-  // 2. Fallback: try reading session cookie (works in Chrome, not Brave)
+  // 2. Fallback: try reading session cookie (works in Chrome, not Brave unless using partitionKey)
   if (typeof chrome !== 'undefined' && chrome.cookies) {
     return new Promise((resolve) => {
-      chrome.cookies.get({
-        url: 'https://fra.cloud.appwrite.io',
-        name: `a_session_${APPWRITE_PROJECT_ID}`
-      }, (cookie) => {
+      const getCookies = (params) => {
+        return new Promise((res) => {
+          try {
+            chrome.cookies.getAll(params, (list) => {
+              res(list || []);
+            });
+          } catch (e) {
+            console.warn('[Appwrite] chrome.cookies.getAll failed with params:', params, e);
+            res([]);
+          }
+        });
+      };
+
+      (async () => {
+        // Try getting cookies from all partitions first
+        let list = await getCookies({
+          name: `a_session_${APPWRITE_PROJECT_ID}`,
+          partitionKey: {}
+        });
+
+        // If no cookies found, try without partitionKey
+        if (list.length === 0) {
+          list = await getCookies({
+            name: `a_session_${APPWRITE_PROJECT_ID}`
+          });
+        }
+
+        const cookie = list[0];
         if (cookie && cookie.value) {
           console.log('[Appwrite] Found active session cookie. Applying fallback headers...');
           client.headers['X-Fallback-Cookies'] = `a_session_${APPWRITE_PROJECT_ID}=${cookie.value}`;
+          // Persist the cookie value in local storage as a session hash
+          try {
+            chrome.storage.local.set({ appwrite_session: cookie.value });
+            console.log('[Appwrite] Persisted session cookie value to local storage');
+          } catch (_) {}
           resolve(true);
         } else {
           console.log('[Appwrite] No session hash or cookie found.');
           resolve(false);
         }
-      });
+      })();
     });
   }
 
