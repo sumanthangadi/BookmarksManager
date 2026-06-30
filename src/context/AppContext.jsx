@@ -123,6 +123,73 @@ function appReducer(state, action) {
   }
 }
 
+function mergeLocalAndCloud(localSections, localBookmarks, localIcons, cloudSections, cloudBookmarks, cloudIcons) {
+  const mergedSections = [...cloudSections];
+  const mergedBookmarks = [...cloudBookmarks];
+  const mergedIcons = { ...cloudIcons };
+
+  const localToCloudSectionIdMap = {};
+  const cloudSectionsByName = new Map(
+    cloudSections.map(s => [s.name.toLowerCase().trim(), s])
+  );
+
+  // 1. Merge sections
+  for (const localSec of localSections) {
+    const normName = localSec.name.toLowerCase().trim();
+    const matchedCloudSec = cloudSectionsByName.get(normName);
+
+    if (matchedCloudSec) {
+      // Map local section ID to matching cloud section ID
+      localToCloudSectionIdMap[localSec.id] = matchedCloudSec.id;
+      // Merge icon if local has one but cloud doesn't
+      if (localIcons[localSec.id] && (!cloudIcons[matchedCloudSec.id] || cloudIcons[matchedCloudSec.id] === 'Folder')) {
+        mergedIcons[matchedCloudSec.id] = localIcons[localSec.id];
+      }
+    } else {
+      // Create new section in cloud space
+      // Generate a temporary ID that will be remapped when restoring to Chrome
+      const newSecId = `sec_${Math.random().toString(36).substr(2, 9)}`;
+      localToCloudSectionIdMap[localSec.id] = newSecId;
+      mergedSections.push({
+        id: newSecId,
+        name: localSec.name,
+        icon: localSec.icon || 'Folder',
+        order: mergedSections.length
+      });
+      if (localIcons[localSec.id]) {
+        mergedIcons[newSecId] = localIcons[localSec.id];
+      }
+    }
+  }
+
+  // 2. Merge bookmarks
+  const cloudUrls = new Set(
+    cloudBookmarks.map(b => b.url.toLowerCase().trim())
+  );
+
+  for (const localBm of localBookmarks) {
+    const targetSectionId = localToCloudSectionIdMap[localBm.sectionId];
+    if (targetSectionId) {
+      const normUrl = localBm.url.toLowerCase().trim();
+      if (!cloudUrls.has(normUrl)) {
+        mergedBookmarks.push({
+          id: localBm.id, // Will be remapped on restore
+          title: localBm.title,
+          url: localBm.url,
+          sectionId: targetSectionId
+        });
+        cloudUrls.add(normUrl);
+      }
+    }
+  }
+
+  return {
+    sections: mergedSections,
+    bookmarks: mergedBookmarks,
+    sectionIcons: mergedIcons
+  };
+}
+
 export function AppProvider({ children, user }) {
   const [state, dispatch] = useReducer(appReducer, getDefaultState());
   const [isLoaded, setIsLoaded] = React.useState(false);
@@ -131,6 +198,13 @@ export function AppProvider({ children, user }) {
   const saveTimeout = useRef(null);
   const cloudSaveTimeout = useRef(null);
   const isRestoringRef = useRef(false);
+  const skipCloudSaveRef = useRef(false);
+  const latestStateRef = useRef(state);
+
+  // Keep latestStateRef updated on every render
+  useEffect(() => {
+    latestStateRef.current = state;
+  }, [state]);
  
   // Load state from storage on mount, auto-import Chrome bookmarks on first run
   const syncFromChromeTree = useCallback(async () => {
@@ -465,12 +539,52 @@ export function AppProvider({ children, user }) {
         const needsCloudSync = stored.needsCloudSync || false;
         const localIcons = stored.sectionIcons || {};
 
+        const currentSections = latestStateRef.current.sections || [];
+        const currentBookmarks = latestStateRef.current.bookmarks || [];
+
         if (cloudDoc) {
           const cloudData = JSON.parse(cloudDoc.data);
           const cloudUpdatedAt = cloudDoc.updatedAt;
 
-          if (!lastSyncTime || new Date(cloudUpdatedAt) > new Date(lastSyncTime)) {
+          if (!lastSyncTime) {
+            // First time logging in on this device/browser, but cloud data exists!
+            // We should SMART MERGE local bookmarks and cloud bookmarks, rather than overwriting.
+            console.log('[Sync] First sync on this device. Merging local and cloud states...');
+            const merged = mergeLocalAndCloud(
+              currentSections,
+              currentBookmarks,
+              localIcons,
+              cloudData.sections || [],
+              cloudData.bookmarks || [],
+              cloudData.sectionIcons || {}
+            );
+
+            // Recreate the merged state locally
+            skipCloudSaveRef.current = true;
+            await restoreBookmarksFromCloud(
+              merged.sections,
+              merged.bookmarks,
+              merged.sectionIcons
+            );
+
+            // Upload the merged state back to the cloud
+            console.log('[Sync] Uploading merged bookmarks to cloud...');
+            await SyncService.saveCloudDashboard(user.$id, {
+              sections: merged.sections,
+              bookmarks: merged.bookmarks,
+              sectionIcons: merged.sectionIcons
+            });
+
+            const freshDoc = await SyncService.fetchCloudDashboard(user.$id);
+            if (freshDoc) {
+              await setStorageData({
+                lastSyncTime: freshDoc.updatedAt,
+                needsCloudSync: false
+              });
+            }
+          } else if (new Date(cloudUpdatedAt) > new Date(lastSyncTime)) {
             console.log('[Sync] Cloud is newer. Restoring cloud state to local browser...');
+            skipCloudSaveRef.current = true;
             await restoreBookmarksFromCloud(
               cloudData.sections || [],
               cloudData.bookmarks || [],
@@ -483,8 +597,8 @@ export function AppProvider({ children, user }) {
           } else if (needsCloudSync || new Date(cloudUpdatedAt) < new Date(lastSyncTime)) {
             console.log('[Sync] Local changes detected. Uploading to cloud...');
             await SyncService.saveCloudDashboard(user.$id, {
-              sections: state.sections,
-              bookmarks: state.bookmarks,
+              sections: currentSections,
+              bookmarks: currentBookmarks,
               sectionIcons: localIcons
             });
             const freshDoc = await SyncService.fetchCloudDashboard(user.$id);
@@ -500,8 +614,8 @@ export function AppProvider({ children, user }) {
         } else {
           console.log('[Sync] No cloud backup found. Creating first backup...');
           await SyncService.saveCloudDashboard(user.$id, {
-            sections: state.sections,
-            bookmarks: state.bookmarks,
+            sections: currentSections,
+            bookmarks: currentBookmarks,
             sectionIcons: localIcons
           });
           const freshDoc = await SyncService.fetchCloudDashboard(user.$id);
@@ -535,6 +649,12 @@ export function AppProvider({ children, user }) {
   useEffect(() => {
     if (!initialized.current || !user) return;
     if (isRestoringRef.current) return;
+
+    if (skipCloudSaveRef.current) {
+      console.log('[Sync] Skipping cloud save because state was just restored from cloud');
+      skipCloudSaveRef.current = false;
+      return;
+    }
 
     if (cloudSaveTimeout.current) {
       clearTimeout(cloudSaveTimeout.current);

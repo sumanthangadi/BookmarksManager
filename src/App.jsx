@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
 import Header from './components/Header/Header';
 import BookmarkGrid from './components/Bookmarks/BookmarkGrid';
+import SessionSaver from './components/Sessions/SessionSaver';
 import SettingsModal from './components/Settings/SettingsModal';
 import { PRESET_WALLPAPERS } from './utils/constants';
 import PaywallScreen from './components/Paywall/PaywallScreen';
@@ -9,10 +10,10 @@ import LoginScreen from './components/Auth/LoginScreen';
 import { AuthService } from './services/auth';
 import { PricingService } from './services/pricing';
 import { useTheme } from './context/ThemeContext';
-import { setClientJWT } from './lib/appwrite';
+import { setClientJWT, setClientSession, refreshAppwriteSession } from './lib/appwrite';
 import { THEMES } from './styles/themes';
 
-function Dashboard({ trialStatus, onLogout }) {
+function Dashboard({ trialStatus, onLogout, userId }) {
   const { state, updateSettings, isLoaded } = useApp();
   const { themeId } = useTheme();
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -66,6 +67,7 @@ function Dashboard({ trialStatus, onLogout }) {
         />
         <main className="flex-1 flex flex-col">
           <BookmarkGrid searchQuery={searchQuery} />
+          <SessionSaver userId={userId} />
         </main>
 
         {/* Footer */}
@@ -176,8 +178,11 @@ export default function App() {
             'appwrite_jwt', 'folio_auth'
           ]);
 
-          // Apply JWT to Appwrite client (may be expired, that's OK)
-          if (stored.appwrite_jwt) {
+          // Try to refresh session from cookies first
+          const hasCookieSession = await refreshAppwriteSession();
+
+          // Apply JWT to Appwrite client if cookie session is not found
+          if (!hasCookieSession && stored.appwrite_jwt) {
             setClientJWT(stored.appwrite_jwt);
           }
 
@@ -252,11 +257,18 @@ export default function App() {
     const handleMessage = (request, sender, sendResponse) => {
       if (request.type === 'SET_JWT' && request.jwt) {
         console.log('[Extension] Received JWT from web app');
-        // Store JWT in chrome.storage.local
+        // Store JWT + session hash in chrome.storage.local
         if (typeof chrome !== 'undefined' && chrome.storage) {
-          chrome.storage.local.set({ appwrite_jwt: request.jwt });
+          const toStore = { appwrite_jwt: request.jwt };
+          if (request.session) {
+            toStore.appwrite_session = request.session;
+          }
+          chrome.storage.local.set(toStore);
         }
-        // Apply JWT to Appwrite client immediately
+        // Apply session hash first (long-lived), then JWT as backup
+        if (request.session) {
+          setClientSession(request.session);
+        }
         setClientJWT(request.jwt);
         // Re-initialize the app
         initApp();
@@ -297,7 +309,7 @@ export default function App() {
       await AuthService.logout();
     } catch (_) {}
     if (typeof chrome !== 'undefined' && chrome.storage) {
-      chrome.storage.local.remove(['appwrite_jwt', 'folio_auth']);
+      chrome.storage.local.remove(['appwrite_jwt', 'appwrite_session', 'folio_auth']);
     }
     setUser(null);
     setTrialStatus(null);
@@ -336,7 +348,7 @@ export default function App() {
   // Main Dashboard
   return (
     <AppProvider user={user}>
-      <Dashboard trialStatus={trialStatus} onLogout={handleLogout} />
+      <Dashboard trialStatus={trialStatus} onLogout={handleLogout} userId={user.$id} />
     </AppProvider>
   );
 }
