@@ -14,7 +14,7 @@ import { setClientJWT, setClientSession, refreshAppwriteSession } from './lib/ap
 import { THEMES } from './styles/themes';
 import { logDebug } from './utils/debug';
 
-function Dashboard({ trialStatus, onLogout, userId }) {
+function Dashboard({ trialStatus, onLogout, userId, isAuthReady }) {
   const { state, updateSettings, isLoaded } = useApp();
   const { themeId } = useTheme();
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -68,7 +68,7 @@ function Dashboard({ trialStatus, onLogout, userId }) {
         />
         <main className="flex-1 flex flex-col">
           <BookmarkGrid searchQuery={searchQuery} />
-          <SessionSaver userId={userId} />
+          <SessionSaver userId={userId} isAuthReady={isAuthReady} />
         </main>
 
         {/* Footer */}
@@ -169,6 +169,7 @@ export default function App() {
   const [trialStatus, setTrialStatus] = useState(null);
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [isAuthReady, setIsAuthReady] = useState(false);
 
   useEffect(() => {
     async function initApp() {
@@ -278,6 +279,7 @@ export default function App() {
           } catch (_) {}
         }
       } finally {
+        setIsAuthReady(true);
         setLoading(false);
       }
     }
@@ -379,7 +381,7 @@ export default function App() {
   // Main Dashboard
   return (
     <AppProvider user={user}>
-      <Dashboard trialStatus={trialStatus} onLogout={handleLogout} userId={user.$id} />
+      <Dashboard trialStatus={trialStatus} onLogout={handleLogout} userId={user.$id} isAuthReady={isAuthReady} />
     </AppProvider>
   );
 }

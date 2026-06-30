@@ -5,7 +5,7 @@ import SaveSessionModal from './SaveSessionModal';
 import Button from '../UI/Button';
 import { logDebug } from '../../utils/debug';
 
-export default function SessionSaver({ userId }) {
+export default function SessionSaver({ userId, isAuthReady }) {
   const [sessions, setSessions] = useState([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -35,8 +35,12 @@ export default function SessionSaver({ userId }) {
   }, [userId]);
 
   useEffect(() => {
-    loadSessions();
-  }, [loadSessions]);
+    if (isAuthReady) {
+      loadSessions();
+    } else {
+      logDebug('[SessionSaver UI] deferring loadSessions because auth is not ready');
+    }
+  }, [loadSessions, isAuthReady]);
 
   // ── Show toast ──
   const showToast = (message, type = 'success') => {
