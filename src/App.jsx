@@ -157,9 +157,9 @@ function Dashboard({ trialStatus, onLogout, userId, isAuthReady }) {
       )}
 
       {/* Settings Modal */}
-      <SettingsModal
-        isOpen={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
+      <SettingsModal 
+        isOpen={settingsOpen} 
+        onClose={() => setSettingsOpen(false)} 
       />
     </div>
   );
@@ -186,32 +186,34 @@ export default function App() {
             hasAuth: !!stored.folio_auth
           });
 
-          // If we have a persistent auth record, show the user instantly in the UI
           if (stored.folio_auth && stored.folio_auth.user) {
             setUser(stored.folio_auth.user);
             setTrialStatus(stored.folio_auth.trialStatus || null);
-            setLoading(false); // hide spinner immediately
+            setLoading(false);
           }
         }
 
-        // Try to authenticate using the session/cookie first
         let currentUser = null;
 
         await logDebug('[NewTab initApp] Restoring session via cookies/storage...');
         const hasSession = await refreshAppwriteSession();
         if (hasSession) {
           await logDebug('[NewTab initApp] Found active session, calling getCurrentUser...');
-          currentUser = await AuthService.getCurrentUser();
-          if (currentUser) {
+          try {
+            currentUser = await account.get();
             await logDebug('[NewTab initApp] Authenticated successfully via session/cookie.');
-          } else {
-            await logDebug('[NewTab initApp] Session/cookie was found but returned 401/error. Clearing session...');
-            // Clear invalid session hash from client and storage
-            const { client } = await import('./lib/appwrite');
-            delete client.headers['X-Appwrite-Session'];
-            delete client.headers['X-Fallback-Cookies'];
-            if (typeof chrome !== 'undefined' && chrome.storage) {
-              chrome.storage.local.remove('appwrite_session');
+          } catch (err) {
+            await logDebug(`[NewTab initApp] Cookie/session verification failed: ${err.message || err}`);
+            if (err.code === 401 || err.code === 403) {
+              await logDebug('[NewTab initApp] Session/cookie rejected with 401/403. Clearing session...');
+              const { client: appwriteClient } = await import('./lib/appwrite');
+              delete appwriteClient.headers['X-Appwrite-Session'];
+              delete appwriteClient.headers['X-Fallback-Cookies'];
+              if (typeof chrome !== 'undefined' && chrome.storage) {
+                chrome.storage.local.remove('appwrite_session');
+              }
+            } else {
+              await logDebug('[NewTab initApp] Network or server error during cookie session validation. Preserving session.');
             }
           }
         }
@@ -220,13 +222,18 @@ export default function App() {
         if (!currentUser && stored.appwrite_jwt) {
           await logDebug('[NewTab initApp] Trying JWT fallback...');
           setClientJWT(stored.appwrite_jwt);
-          currentUser = await AuthService.getCurrentUser();
-          if (currentUser) {
+          try {
+            currentUser = await account.get();
             await logDebug('[NewTab initApp] Authenticated successfully via JWT.');
-          } else {
-            await logDebug('[NewTab initApp] JWT fallback failed. Clearing JWT...');
-            if (typeof chrome !== 'undefined' && chrome.storage) {
-              chrome.storage.local.remove('appwrite_jwt');
+          } catch (err) {
+            await logDebug(`[NewTab initApp] JWT verification failed: ${err.message || err}`);
+            if (err.code === 401 || err.code === 403) {
+              await logDebug('[NewTab initApp] JWT rejected with 401/403. Clearing JWT...');
+              if (typeof chrome !== 'undefined' && chrome.storage) {
+                chrome.storage.local.remove('appwrite_jwt');
+              }
+            } else {
+              await logDebug('[NewTab initApp] Network or server error during JWT validation. Preserving JWT.');
             }
           }
         }

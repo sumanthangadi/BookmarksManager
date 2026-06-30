@@ -24,7 +24,8 @@ export function setClientJWT(jwt) {
 export function setClientSession(sessionHash) {
   if (sessionHash) {
     client.setSession(sessionHash);
-    console.log('[Appwrite] Session hash applied via client.setSession()');
+    client.headers['X-Fallback-Cookies'] = `a_session_${APPWRITE_PROJECT_ID}=${sessionHash}`;
+    console.log('[Appwrite] Session hash applied via client.setSession() and X-Fallback-Cookies');
     return true;
   }
   return false;
@@ -39,6 +40,7 @@ export async function refreshAppwriteSession() {
       if (stored.appwrite_session) {
         console.log('[Appwrite] Found stored session hash. Applying...');
         client.setSession(stored.appwrite_session);
+        client.headers['X-Fallback-Cookies'] = `a_session_${APPWRITE_PROJECT_ID}=${stored.appwrite_session}`;
         return true;
       }
     } catch (_) {}
