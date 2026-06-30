@@ -450,11 +450,30 @@ export function AppProvider({ children, user }) {
 
   // Helper to recreate Chrome bookmarks bar tree from cloud data
   const restoreBookmarksFromCloud = useCallback(async (cloudSections, cloudBookmarks, cloudIcons) => {
-    if (!isBookmarksApiAvailable()) return;
+    if (!isBookmarksApiAvailable()) return null;
     
     isRestoringRef.current = true;
     try {
-      // 1. Remove all existing bookmarks & folders in Bookmarks Bar ("1") and Other Bookmarks ("2")
+      // 1. Get all system folder IDs in the current browser (children of root "0")
+      const rootNode = await new Promise(resolve => {
+        try {
+          chrome.bookmarks.getSubTree("0", (results) => {
+            resolve(results ? results[0] : null);
+          });
+        } catch (e) {
+          resolve(null);
+        }
+      });
+      const actualSystemIds = new Set();
+      if (rootNode && rootNode.children) {
+        rootNode.children.forEach(child => actualSystemIds.add(child.id));
+      } else {
+        actualSystemIds.add("1");
+        actualSystemIds.add("2");
+        actualSystemIds.add("3");
+      }
+
+      // Remove all existing bookmarks & folders in Bookmarks Bar and Other Bookmarks
       const removeChildren = async (parentId) => {
         const children = await new Promise(resolve => chrome.bookmarks.getChildren(parentId, resolve));
         if (children) {
@@ -467,30 +486,72 @@ export function AppProvider({ children, user }) {
           }
         }
       };
-      await removeChildren("1");
-      await removeChildren("2");
+
+      const systemIdsToClear = Array.from(actualSystemIds).filter(
+        id => id === "1" || id === "2" || id === "toolbar_____" || id === "unfiled_____"
+      );
+      for (const sysId of systemIdsToClear) {
+        await removeChildren(sysId);
+      }
+
+      // De-duplicate cloudSections by name (case-insensitive, trimmed)
+      const uniqueSections = [];
+      const sectionNameMap = new Map(); // name -> first section ID
+      const duplicateIdRemap = {}; // duplicateId -> originalId
+
+      // First, handle system folders so they always take priority
+      for (const sec of cloudSections) {
+        const normName = sec.name.toLowerCase().trim();
+        if (actualSystemIds.has(sec.id)) {
+          sectionNameMap.set(normName, sec.id);
+          uniqueSections.push(sec);
+        }
+      }
+
+      // Then handle non-system folders
+      for (const sec of cloudSections) {
+        if (actualSystemIds.has(sec.id)) continue;
+        const normName = sec.name.toLowerCase().trim();
+        
+        if (sectionNameMap.has(normName)) {
+          // It's a duplicate! Remap its ID to the first one's ID
+          duplicateIdRemap[sec.id] = sectionNameMap.get(normName);
+        } else {
+          sectionNameMap.set(normName, sec.id);
+          uniqueSections.push(sec);
+        }
+      }
 
       // 2. Recreate folders and map old IDs to new Chrome IDs
       const idMap = {};
       const newSections = [];
       const newBookmarks = [];
       
-      const sortedSections = [...cloudSections].sort((a, b) => a.order - b.order);
+      const sortedSections = [...uniqueSections].sort((a, b) => a.order - b.order);
       
       for (const sec of sortedSections) {
-        const folder = await new Promise(resolve => {
-          chrome.bookmarks.create({ parentId: "1", title: sec.name }, resolve);
-        });
-        idMap[sec.id] = folder.id;
-        newSections.push({
-          ...sec,
-          id: folder.id
-        });
+        if (actualSystemIds.has(sec.id)) {
+          idMap[sec.id] = sec.id;
+          newSections.push({
+            ...sec,
+            id: sec.id
+          });
+        } else {
+          const folder = await new Promise(resolve => {
+            chrome.bookmarks.create({ parentId: "1", title: sec.name }, resolve);
+          });
+          idMap[sec.id] = folder.id;
+          newSections.push({
+            ...sec,
+            id: folder.id
+          });
+        }
       }
 
       // 3. Recreate bookmarks
       for (const bm of cloudBookmarks) {
-        const newParentId = idMap[bm.sectionId];
+        const resolvedSectionId = duplicateIdRemap[bm.sectionId] || bm.sectionId;
+        const newParentId = idMap[resolvedSectionId];
         if (newParentId) {
           const createdBm = await new Promise(resolve => {
             chrome.bookmarks.create({ parentId: newParentId, title: bm.title, url: bm.url }, resolve);
@@ -505,7 +566,7 @@ export function AppProvider({ children, user }) {
 
       // 4. Update sectionIcons in Chrome local storage
       const newIcons = {};
-      for (const sec of cloudSections) {
+      for (const sec of uniqueSections) {
         const newId = idMap[sec.id];
         if (newId && cloudIcons && cloudIcons[sec.id]) {
           newIcons[newId] = cloudIcons[sec.id];
@@ -518,8 +579,11 @@ export function AppProvider({ children, user }) {
         type: ACTIONS.SET_STATE,
         payload: { sections: newSections, bookmarks: newBookmarks }
       });
+
+      return { sections: newSections, bookmarks: newBookmarks, sectionIcons: newIcons };
     } catch (err) {
       console.error('[Sync] Error restoring bookmarks from cloud:', err);
+      return null;
     } finally {
       isRestoringRef.current = false;
     }
@@ -561,7 +625,7 @@ export function AppProvider({ children, user }) {
 
             // Recreate the merged state locally
             skipCloudSaveRef.current = true;
-            await restoreBookmarksFromCloud(
+            const cleaned = await restoreBookmarksFromCloud(
               merged.sections,
               merged.bookmarks,
               merged.sectionIcons
@@ -570,9 +634,9 @@ export function AppProvider({ children, user }) {
             // Upload the merged state back to the cloud
             console.log('[Sync] Uploading merged bookmarks to cloud...');
             await SyncService.saveCloudDashboard(user.$id, {
-              sections: merged.sections,
-              bookmarks: merged.bookmarks,
-              sectionIcons: merged.sectionIcons
+              sections: cleaned ? cleaned.sections : merged.sections,
+              bookmarks: cleaned ? cleaned.bookmarks : merged.bookmarks,
+              sectionIcons: cleaned ? cleaned.sectionIcons : merged.sectionIcons
             });
 
             const freshDoc = await SyncService.fetchCloudDashboard(user.$id);
@@ -585,15 +649,33 @@ export function AppProvider({ children, user }) {
           } else if (new Date(cloudUpdatedAt) > new Date(lastSyncTime)) {
             console.log('[Sync] Cloud is newer. Restoring cloud state to local browser...');
             skipCloudSaveRef.current = true;
-            await restoreBookmarksFromCloud(
+            const cleaned = await restoreBookmarksFromCloud(
               cloudData.sections || [],
               cloudData.bookmarks || [],
               cloudData.sectionIcons || {}
             );
-            await setStorageData({
-              lastSyncTime: cloudUpdatedAt,
-              needsCloudSync: false
-            });
+
+            // If de-duplication cleaned up the sections list, upload it back to sync the cloud
+            if (cleaned && cleaned.sections.length < (cloudData.sections || []).length) {
+              console.log('[Sync] Uploading de-duplicated bookmarks back to cloud...');
+              await SyncService.saveCloudDashboard(user.$id, {
+                sections: cleaned.sections,
+                bookmarks: cleaned.bookmarks,
+                sectionIcons: cleaned.sectionIcons
+              });
+              const freshDoc = await SyncService.fetchCloudDashboard(user.$id);
+              if (freshDoc) {
+                await setStorageData({
+                  lastSyncTime: freshDoc.updatedAt,
+                  needsCloudSync: false
+                });
+              }
+            } else {
+              await setStorageData({
+                lastSyncTime: cloudUpdatedAt,
+                needsCloudSync: false
+              });
+            }
           } else if (needsCloudSync || new Date(cloudUpdatedAt) < new Date(lastSyncTime)) {
             console.log('[Sync] Local changes detected. Uploading to cloud...');
             await SyncService.saveCloudDashboard(user.$id, {
