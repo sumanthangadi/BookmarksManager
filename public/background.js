@@ -10,14 +10,20 @@ chrome.runtime.onMessageExternal.addListener((request, sender, sendResponse) => 
 
     chrome.storage.local.get('folio_auth', (stored) => {
       const existingAuth = stored.folio_auth || {};
-      chrome.storage.local.set({
+      const payload = {
         appwrite_jwt: request.jwt,
         folio_auth: {
           user: userData,
           trialStatus: existingAuth.trialStatus || null,
         }
-      }, () => {
-        console.log('[Background] JWT + auth record stored');
+      };
+      
+      if (request.session) {
+        payload.appwrite_session = request.session;
+      }
+
+      chrome.storage.local.set(payload, () => {
+        console.log('[Background] JWT + session hash + auth record stored');
         sendResponse({ ok: true });
       });
     });
