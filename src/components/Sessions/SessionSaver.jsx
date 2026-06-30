@@ -3,6 +3,7 @@ import { Save, ExternalLink, Trash2, Monitor, Clock, Layers } from 'lucide-react
 import { SessionsService } from '../../services/sessions';
 import SaveSessionModal from './SaveSessionModal';
 import Button from '../UI/Button';
+import { logDebug } from '../../utils/debug';
 
 export default function SessionSaver({ userId }) {
   const [sessions, setSessions] = useState([]);
@@ -14,12 +15,19 @@ export default function SessionSaver({ userId }) {
 
   // ── Fetch sessions on mount ──
   const loadSessions = useCallback(async () => {
-    if (!userId) return;
+    await logDebug(`[SessionSaver UI] loadSessions triggered with userId: ${userId}`);
+    if (!userId) {
+      await logDebug('[SessionSaver UI] loadSessions cancelled: userId is empty/null');
+      setLoadingSessions(false);
+      return;
+    }
     setLoadingSessions(true);
     try {
       const docs = await SessionsService.fetchSessions(userId);
+      await logDebug(`[SessionSaver UI] fetchSessions returned ${docs.length} documents`);
       setSessions(docs);
     } catch (e) {
+      await logDebug(`[SessionSaver UI] fetchSessions error: ${e.message || e}`);
       console.error('[SessionSaver] Failed to load sessions:', e);
     } finally {
       setLoadingSessions(false);
@@ -308,8 +316,8 @@ function DebugLogsPanel() {
 
   const fetchLogs = useCallback(async () => {
     if (typeof chrome !== 'undefined' && chrome.storage) {
-      const res = await chrome.storage.local.get('popup_debug_logs');
-      setLogs(res.popup_debug_logs || []);
+      const res = await chrome.storage.local.get('folio_debug_logs');
+      setLogs(res.folio_debug_logs || []);
     }
   }, []);
 
@@ -323,7 +331,7 @@ function DebugLogsPanel() {
 
   const handleClear = async () => {
     if (typeof chrome !== 'undefined' && chrome.storage) {
-      await chrome.storage.local.remove('popup_debug_logs');
+      await chrome.storage.local.remove('folio_debug_logs');
       setLogs([]);
     }
   };

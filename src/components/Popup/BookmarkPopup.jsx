@@ -6,6 +6,7 @@ import Button from '../UI/Button';
 import { isBookmarksApiAvailable } from '../../utils/bookmarkImporter';
 import { SessionsService } from '../../services/sessions';
 import { AuthService } from '../../services/auth';
+import { logDebug } from '../../utils/debug';
 
 export default function BookmarkPopup() {
   const { state, addBookmark, addSection, saveStateNow, isLoaded } = useApp();
@@ -30,18 +31,6 @@ export default function BookmarkPopup() {
   const [isSavingSession, setIsSavingSession] = useState(false);
   const [sessionSaved, setSessionSaved] = useState(false);
   const [sessionError, setSessionError] = useState('');
-
-  const logDebug = async (msg, extra = null) => {
-    console.log(msg, extra || '');
-    if (typeof chrome !== 'undefined' && chrome.storage) {
-      try {
-        const res = await chrome.storage.local.get('popup_debug_logs');
-        const logs = res.popup_debug_logs || [];
-        logs.push(`${new Date().toLocaleTimeString()}: ${msg} ${extra ? JSON.stringify(extra) : ''}`);
-        await chrome.storage.local.set({ popup_debug_logs: logs.slice(-50) }); // keep last 50
-      } catch (e) {}
-    }
-  };
 
   useEffect(() => {
     // 1. Get current tab information for single bookmark tab
