@@ -36,7 +36,8 @@ export const SessionsService = {
    * @returns {Promise<object|null>}
    */
   async saveSession(userId, sessionName, tabs) {
-    if (!userId || !sessionName) return null;
+    if (!userId) throw new Error('User ID is missing. Please log in.');
+    if (!sessionName) throw new Error('Session name is missing.');
     try {
       const doc = await databases.createDocument(
         APPWRITE_DATABASE_ID,

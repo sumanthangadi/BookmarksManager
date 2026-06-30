@@ -80,6 +80,11 @@ export default function BookmarkPopup() {
       try {
         if (typeof chrome !== 'undefined' && chrome.storage) {
           const stored = await chrome.storage.local.get(['appwrite_jwt', 'folio_auth', 'appwrite_session']);
+          console.log('[Popup Auth] Stored keys:', {
+            hasJwt: !!stored.appwrite_jwt,
+            hasSession: !!stored.appwrite_session,
+            hasUser: !!stored.folio_auth?.user
+          });
           
           const { refreshAppwriteSession, setClientJWT, client } = await import('../../lib/appwrite');
 
@@ -87,9 +92,11 @@ export default function BookmarkPopup() {
           const hasSession = await refreshAppwriteSession();
           
           if (hasSession) {
+            console.log('[Popup Auth] Found active session. Getting current user...');
             currentUser = await AuthService.getCurrentUser();
+            console.log('[Popup Auth] Current user response:', currentUser);
             if (!currentUser) {
-              // Session expired/invalid! Clear it.
+              console.warn('[Popup Auth] Session expired/invalid. Clearing session...');
               delete client.headers['X-Appwrite-Session'];
               delete client.headers['X-Fallback-Cookies'];
               await chrome.storage.local.remove('appwrite_session');
@@ -98,23 +105,29 @@ export default function BookmarkPopup() {
 
           // Fallback to JWT if session failed
           if (!currentUser && stored.appwrite_jwt) {
+            console.log('[Popup Auth] Trying JWT fallback...');
             setClientJWT(stored.appwrite_jwt);
             currentUser = await AuthService.getCurrentUser();
+            console.log('[Popup Auth] JWT user response:', currentUser);
             if (!currentUser) {
-              // JWT expired/invalid! Clear it.
+              console.warn('[Popup Auth] JWT expired/invalid. Clearing JWT...');
               await chrome.storage.local.remove('appwrite_jwt');
             }
           }
 
           if (currentUser) {
             setUser(currentUser);
+            console.log('[Popup Auth] Authenticated user:', currentUser.$id);
           } else if (stored.folio_auth && stored.folio_auth.user) {
-            // Offline fallback (read-only for UI representation)
+            // Offline fallback
             setUser(stored.folio_auth.user);
+            console.log('[Popup Auth] Offline user fallback:', stored.folio_auth.user.$id);
+          } else {
+            console.log('[Popup Auth] No user authenticated.');
           }
         }
       } catch (e) {
-        console.error('[Popup] Auth init failed:', e);
+        console.error('[Popup Auth] Auth init failed:', e);
       } finally {
         setIsAuthLoaded(true);
       }
@@ -181,6 +194,7 @@ export default function BookmarkPopup() {
   };
 
   const handleSaveSession = async () => {
+    console.log('[Popup SaveSession] Clicked. User:', user, 'SessionName:', sessionName, 'Tabs:', openTabs);
     if (!user) {
       setSessionError('Please sign in to Folio to save sessions.');
       return;
@@ -198,12 +212,15 @@ export default function BookmarkPopup() {
     setSessionError('');
 
     try {
-      await SessionsService.saveSession(user.$id, sessionName.trim(), openTabs);
+      console.log('[Popup SaveSession] Calling SessionsService.saveSession with:', user.$id, sessionName.trim());
+      const result = await SessionsService.saveSession(user.$id, sessionName.trim(), openTabs);
+      console.log('[Popup SaveSession] Save result:', result);
       setSessionSaved(true);
       setTimeout(() => {
         window.close();
       }, 1200);
     } catch (err) {
+      console.error('[Popup SaveSession] Error saving session:', err);
       setSessionError(err?.message || 'Failed to save session.');
       setIsSavingSession(false);
     }
