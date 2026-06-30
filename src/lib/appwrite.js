@@ -77,6 +77,7 @@ export async function refreshAppwriteSession() {
         const cookie = list[0];
         if (cookie && cookie.value) {
           console.log('[Appwrite] Found active session cookie. Applying fallback headers...');
+          client.setSession(cookie.value);
           client.headers['X-Fallback-Cookies'] = `a_session_${APPWRITE_PROJECT_ID}=${cookie.value}`;
           // Persist the cookie value in local storage as a session hash
           try {
