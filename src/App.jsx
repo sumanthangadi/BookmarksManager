@@ -324,6 +324,29 @@ export default function App() {
     };
   }, []);
 
+  // Auto-recheck paid status every 30s while paywall is showing
+  // This allows admin promotions to take effect without user action
+  useEffect(() => {
+    const isPaywallVisible = user && trialStatus && !trialStatus.paid && !trialStatus.trialActive;
+    if (!isPaywallVisible) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const freshStatus = await PricingService.getUserStatus(user.$id);
+        if (freshStatus && (freshStatus.paid || freshStatus.trialActive)) {
+          setTrialStatus(freshStatus);
+          if (typeof chrome !== 'undefined' && chrome.storage) {
+            chrome.storage.local.set({
+              folio_auth: { user, trialStatus: freshStatus }
+            });
+          }
+        }
+      } catch (_) {}
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, [user, trialStatus]);
+
   const handleLogout = async () => {
     // Explicit logout — clear everything
     try {
