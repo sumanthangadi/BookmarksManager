@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Save, ExternalLink, Trash2, Monitor, Clock, Layers } from 'lucide-react';
 import { SessionsService } from '../../services/sessions';
 import SaveSessionModal from './SaveSessionModal';
+import Modal from '../UI/Modal';
 import Button from '../UI/Button';
 
 export default function SessionSaver({ userId }) {
@@ -11,6 +12,7 @@ export default function SessionSaver({ userId }) {
   const [loadingSessions, setLoadingSessions] = useState(true);
   const [toast, setToast] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
+  const [sessionToDelete, setSessionToDelete] = useState(null);
 
   // ── Fetch sessions on mount ──
   const loadSessions = useCallback(async () => {
@@ -114,14 +116,16 @@ export default function SessionSaver({ userId }) {
   };
 
   // ── Delete session ──
-  const handleDeleteSession = async (session) => {
-    if (!window.confirm(`Delete "${session.sessionName}"? This cannot be undone.`)) return;
-
-    setDeletingId(session.$id);
+  const confirmDelete = async () => {
+    if (!sessionToDelete) return;
+    setDeletingId(sessionToDelete.$id);
+    const sessionName = sessionToDelete.sessionName;
+    const sessionId = sessionToDelete.$id;
+    setSessionToDelete(null);
     try {
-      await SessionsService.deleteSession(session.$id);
-      setSessions(prev => prev.filter(s => s.$id !== session.$id));
-      showToast(`Deleted "${session.sessionName}"`);
+      await SessionsService.deleteSession(sessionId);
+      setSessions(prev => prev.filter(s => s.$id !== sessionId));
+      showToast(`Deleted "${sessionName}"`);
     } catch (e) {
       console.error('[SessionSaver] Delete failed:', e);
       showToast('Failed to delete session', 'error');
@@ -255,7 +259,7 @@ export default function SessionSaver({ userId }) {
                   Open
                 </button>
                 <button
-                  onClick={() => handleDeleteSession(session)}
+                  onClick={() => setSessionToDelete(session)}
                   disabled={deletingId === session.$id}
                   className="p-1.5 rounded-lg transition-all duration-200 opacity-50 group-hover:opacity-100 hover:bg-red-500/20"
                   style={{ color: 'var(--text-secondary)' }}
@@ -281,6 +285,41 @@ export default function SessionSaver({ userId }) {
         onSave={handleSaveSession}
         loading={saving}
       />
+
+      {/* Delete Confirmation Modal */}
+      <Modal
+        isOpen={!!sessionToDelete}
+        onClose={() => setSessionToDelete(null)}
+        title="Delete Session"
+        maxWidth="max-w-md"
+      >
+        <div className="space-y-5">
+          <p className="text-sm leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+            Are you sure you want to delete <strong style={{ color: 'var(--text-primary)' }}>"{sessionToDelete?.sessionName}"</strong>? This action cannot be undone.
+          </p>
+          <div className="flex gap-3 justify-end">
+            <Button
+              variant="ghost"
+              size="md"
+              onClick={() => setSessionToDelete(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              size="md"
+              onClick={confirmDelete}
+              style={{
+                background: 'rgb(220, 38, 38)',
+                borderColor: 'rgba(220, 38, 38, 0.3)',
+                boxShadow: '0 2px 12px rgba(220, 38, 38, 0.25)'
+              }}
+            >
+              Delete
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Toast Notification */}
       {toast && (
