@@ -16,7 +16,7 @@ export const PricingService = {
       );
 
       // 2. Calculate trial days
-      const trialStart = new Date(userDoc.trial_start).getTime();
+      const trialStart = new Date(userDoc.loginDate).getTime();
       const daysElapsed = (Date.now() - trialStart) / (1000 * 60 * 60 * 24);
       const trialActive = daysElapsed < 30;
       const daysRemaining = Math.max(0, Math.ceil(30 - daysElapsed));
