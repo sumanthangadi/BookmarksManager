@@ -21,7 +21,10 @@
     "default_title": "Add to Folio"
   },
   "host_permissions": [
-    "https://fra.cloud.appwrite.io/*"
+    "https://fra.cloud.appwrite.io/*",
+    "https://*.getfolio.tech/*",
+    "https://getfolio.tech/*",
+    "http://localhost/*"
   ],
   "externally_connectable": {
     "matches": [

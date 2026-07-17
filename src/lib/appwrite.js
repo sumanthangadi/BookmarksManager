@@ -23,6 +23,7 @@ export function setClientJWT(jwt) {
 // Authenticate using the long-lived session hash (no cookies needed)
 export function setClientSession(sessionHash) {
   if (sessionHash) {
+    client.headers['X-Fallback-Cookies'] = `a_session_${APPWRITE_PROJECT_ID}=${sessionHash}`;
     client.setSession(sessionHash);
     console.log('[Appwrite] Session hash applied via client.setSession()');
     return true;
@@ -37,7 +38,8 @@ export async function refreshAppwriteSession() {
     try {
       const stored = await chrome.storage.local.get('appwrite_session');
       if (stored.appwrite_session) {
-        console.log('[Appwrite] Found stored session hash. Applying...');
+        console.log('[Appwrite] Found stored session hash. Applying fallback headers & session...');
+        client.headers['X-Fallback-Cookies'] = `a_session_${APPWRITE_PROJECT_ID}=${stored.appwrite_session}`;
         client.setSession(stored.appwrite_session);
         return true;
       }
